@@ -1,0 +1,17 @@
+# Mengabaikan folder dependency yang berat
+node_modules/
+dashboard/node_modules/
+backend/node_modules/
+
+# Mengabaikan file hasil build
+dashboard/dist/
+
+# Mengabaikan database lokal
+mysql_data/
+
+# Mengabaikan file rahasia (password database)
+backend/.env
+.env
+
+# Mengabaikan folder NUC yang gak kepake di cloud
+NUC/

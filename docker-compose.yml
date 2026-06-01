@@ -1,0 +1,48 @@
+services:
+  # 1. Jembatan IoT (Mosquitto MQTT Broker)
+  mqtt:
+    image: eclipse-mosquitto:latest
+    container_name: mqtt_broker
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      # Kita buat file config sederhana agar mosquitto menerima koneksi dari luar
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+
+  # 2. DATABASE (MySQL)
+  db:
+    image: mysql:8.0
+    container_name: aquasafe_db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: aquasafe_iot
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: password
+      TZ: Asia/Jakarta
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+
+  # 3. PANEL ADMIN DATABASE (phpMyAdmin)
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: aquasafe_pma
+    environment:
+      PMA_HOST: db
+      PMA_USER: root
+      PMA_PASSWORD: root
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+
+  # 2. Dapur Kita (Node.js Backend)
+  # (Sementara kita matikan dulu bagian backend docker ini sampai Mosquitto jalan lancar)
+  # backend:
+  #   build: ./siap-backend
+  #   ports:
+  #     - "5000:5000"
+  #   depends_on:
+  #     - mqtt
