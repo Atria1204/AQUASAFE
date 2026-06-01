@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Activity, Search, AlertTriangle, CheckCircle2,
     Thermometer, FlaskConical, Wind, Leaf,
@@ -113,24 +113,90 @@ export default function Overview({
     // === STATE KONTROL PAKAN (PAGI & SORE) ===
     const [savedPagi, setSavedPagi] = useState('08:00');
     const [savedSore, setSavedSore] = useState('16:00');
+    const [isManualFeedOn, setIsManualFeedOn] = useState(false);
     const [inputPagi, setInputPagi] = useState('');
     const [inputSore, setInputSore] = useState('');
 
-    const handleSavePagi = () => {
-        if (inputPagi) {
-            setSavedPagi(inputPagi);
-            alert(`Jadwal Pakan PAGI berhasil diatur ke jam ${inputPagi} WIB!`);
-            setInputPagi('');
+    useEffect(() => {
+        const fetchPakan = () => {
+            fetch('http://100.64.178.105:5000/api/pakan')
+                .then(res => res.json())
+                .then(data => {
+                    const formatJam = (val) => {
+                        if (val === undefined || val === null) return '00:00';
+                        if (typeof val === 'string' && val.includes(':')) return val;
+                        return val.toString().padStart(2, '0') + ':00';
+                    };
+
+                    if (data.pagi !== undefined) setSavedPagi(formatJam(data.pagi));
+                    if (data.sore !== undefined) setSavedSore(formatJam(data.sore));
+                    if (data.sekarang !== undefined) setIsManualFeedOn(data.sekarang === 1);
+                })
+                .catch(err => console.error("Gagal load data pakan:", err));
+        };
+
+        fetchPakan();
+        const intervalId = setInterval(fetchPakan, 2000);
+        return () => clearInterval(intervalId);
+    }, []);
+
+    // 🔥 TAMBAHIN FUNGSI INI BUAT NEMBAK KE BACKEND 🔥
+    const handleSetPakan = async (waktu, nilaiWaktu) => {
+        if (!nilaiWaktu) return alert('Pilih jamnya terlebih dahulu!');
+
+        let jadwalPagi = savedPagi;
+        let jadwalSore = savedSore;
+
+        // Update state lokal dulu biar tampilan langsung berubah
+        if (waktu === 'pagi') {
+            setSavedPagi(nilaiWaktu);
+            jadwalPagi = nilaiWaktu;
+        } else {
+            setSavedSore(nilaiWaktu);
+            jadwalSore = nilaiWaktu;
+        }
+
+        // Tembak data HTTP POST ke Node.js
+        try {
+            // Sesuaikan IP ini pakai IP NUC lu kalau lagi jalanin di jaringan lokal
+            const response = await fetch('http://100.64.178.105:5000/api/feeder/schedule', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    deviceId: "AQUA-COBA1",
+                    jadwalPagi: jadwalPagi,
+                    jadwalSore: jadwalSore
+                })
+            });
+            const data = await response.json();
+
+            if (data.success) {
+                alert(`✅ Jadwal Pakan ${waktu.toUpperCase()} berhasil dikirim ke alat!`);
+            }
+        } catch (error) {
+            console.error("Error:", error);
+            alert("❌ Gagal connect ke server! Pastikan backend nyala.");
         }
     };
 
-    const handleSaveSore = () => {
-        if (inputSore) {
-            setSavedSore(inputSore);
-            alert(`Jadwal Pakan SORE berhasil diatur ke jam ${inputSore} WIB!`);
-            setInputSore('');
+
+    const handleToggleManualFeed = async () => {
+        try {
+            const newState = !isManualFeedOn ? 1 : 0;
+            const response = await fetch('http://100.64.178.105:5000/api/feeder/manual', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ deviceId: "AQUA-COBA1", action: newState })
+            });
+            const data = await response.json();
+            if (data.success) {
+                setIsManualFeedOn(!isManualFeedOn);
+            }
+        } catch (error) {
+            alert("❌ Gagal connect ke server! Pastikan backend nyala.");
         }
     };
+
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
@@ -155,15 +221,15 @@ export default function Overview({
                     <GlassSensorCard title="Flow 1" valueKey="flow1" sensorData={sensorData} setActiveDetail={setActiveDetail} />
                     <GlassSensorCard title="Flow 2" valueKey="flow2" sensorData={sensorData} setActiveDetail={setActiveDetail} />
 
-                    {/* === CARD KONTROL PAKAN (PAGI & SORE) === */}
-                    <div className="col-span-2 md:col-span-2 group relative backdrop-blur-2xl bg-gradient-to-br from-indigo-800/80 to-purple-600/60 p-4 rounded-3xl h-36 flex flex-col justify-between border border-indigo-400/50 hover:border-white/60 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_10px_45px_-10px_rgba(99,102,241,0.6)] overflow-hidden shadow-lg">
+                    {/* === CARD KONTROL PAKAN === */}
+                    <div className="col-span-2 md:col-span-2 group relative backdrop-blur-2xl bg-gradient-to-br from-indigo-800/80 to-purple-600/60 p-4 rounded-3xl h-fit flex flex-col justify-between border border-indigo-400/50 hover:border-white/60 transition-all duration-500 hover:-translate-y-1 hover:shadow-[0_10px_45px_-10px_rgba(99,102,241,0.6)] overflow-hidden shadow-lg">
                         <div className="absolute -right-6 -bottom-6 opacity-20 text-indigo-200 pointer-events-none transform group-hover:scale-110 group-hover:-rotate-12 transition-transform duration-700">
                             <Timer size={120} />
                         </div>
 
                         <div className="flex justify-between items-center relative z-10 mb-2">
                             <h3 className="text-[10px] uppercase font-black tracking-widest text-white/95 drop-shadow-md">
-                                Jadwal Pakan Otomatis
+                                Kontrol Auto-Feeder
                             </h3>
                             <div className="p-1.5 rounded-full border border-indigo-400/60 bg-black/25 shadow-inner text-indigo-100">
                                 <Timer size={14} />
@@ -171,8 +237,7 @@ export default function Overview({
                         </div>
 
                         {/* PEMBAGIAN 2 KOLOM (KIRI PAGI, KANAN SORE) */}
-                        <div className="flex items-center justify-between relative z-10 h-full w-full gap-3">
-
+                        <div className="flex items-center justify-between relative z-10 w-full gap-3 mb-3">
                             {/* BLOK PAGI */}
                             <div className="flex flex-col flex-1 bg-black/20 p-2.5 rounded-2xl border border-white/5">
                                 <div className="flex justify-between items-center mb-1.5">
@@ -186,13 +251,7 @@ export default function Overview({
                                         onChange={(e) => setInputPagi(e.target.value)}
                                         className="bg-black/30 border border-white/10 rounded-lg text-white text-[10px] font-bold focus:outline-none focus:border-indigo-400 w-full px-1.5 py-1 [color-scheme:dark]"
                                     />
-                                    <button
-                                        onClick={handleSavePagi}
-                                        disabled={!inputPagi}
-                                        className="bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 disabled:text-slate-400 text-white text-[9px] font-black tracking-wider px-2 py-1 rounded-lg transition-colors"
-                                    >
-                                        SET
-                                    </button>
+                                    <button onClick={() => handleSetPakan('pagi', inputPagi)} className="bg-indigo-600 text-white text-[9px] px-2 py-1 rounded-lg hover:bg-indigo-500 transition-colors">SET</button>
                                 </div>
                             </div>
 
@@ -209,17 +268,21 @@ export default function Overview({
                                         onChange={(e) => setInputSore(e.target.value)}
                                         className="bg-black/30 border border-white/10 rounded-lg text-white text-[10px] font-bold focus:outline-none focus:border-indigo-400 w-full px-1.5 py-1 [color-scheme:dark]"
                                     />
-                                    <button
-                                        onClick={handleSaveSore}
-                                        disabled={!inputSore}
-                                        className="bg-indigo-500 hover:bg-indigo-400 disabled:bg-slate-700 disabled:text-slate-400 text-white text-[9px] font-black tracking-wider px-2 py-1 rounded-lg transition-colors"
-                                    >
-                                        SET
-                                    </button>
+                                    <button onClick={() => handleSetPakan('sore', inputSore)} className="bg-indigo-600 text-white text-[9px] px-2 py-1 rounded-lg hover:bg-indigo-500 transition-colors">SET</button>
                                 </div>
                             </div>
-
                         </div>
+
+                        {/* TOMBOL BERI MAKAN SEKARANG (TOGGLE NYALA/MATI) */}
+                        <button
+                            onClick={handleToggleManualFeed}
+                            className={`relative z-10 w-full text-white text-[11px] font-black tracking-widest uppercase py-2.5 rounded-xl border transition-all duration-300 ${isManualFeedOn
+                                    ? "bg-red-500/80 hover:bg-red-500 border-red-400/50 shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:shadow-[0_0_25px_rgba(239,68,68,0.5)]"
+                                    : "bg-emerald-500/80 hover:bg-emerald-500 border-emerald-400/50 shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:shadow-[0_0_25px_rgba(16,185,129,0.5)]"
+                                }`}
+                        >
+                            {isManualFeedOn ? "BERHENTI MAKAN (STOP)" : "BERI MAKAN SEKARANG"}
+                        </button>
                     </div>
                 </div>
 

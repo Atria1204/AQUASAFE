@@ -34,7 +34,7 @@ export default function App() {
 
   const fetchDevices = () => {
     if (!userId) { setIsLoading(false); return; }
-    fetch(`https://api.aquasafe.my.id/api/devices/${userId}`)
+    fetch(`http://100.64.178.105:5000/api/devices/${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data && data.length > 0) {
@@ -64,12 +64,12 @@ export default function App() {
   useEffect(() => {
     if (!selectedDevice || !userId) return;
     const fetchData = () => {
-      fetch(`https://api.aquasafe.my.id/api/sensor/${selectedDevice}`)
+      fetch(`http://100.64.178.105:5000/api/sensor/${selectedDevice}`)
         .then(res => res.json())
         .then(data => { if (data.suhu !== undefined) setSensorData(data); })
         .catch(err => console.error("Gagal memuat sensor:", err));
 
-      fetch(`https://api.aquasafe.my.id/api/history/${selectedDevice}`)
+      fetch(`http://100.64.178.105:5000/api/history/${selectedDevice}`)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
@@ -99,7 +99,7 @@ export default function App() {
           }
         });
 
-      fetch(`https://api.aquasafe.my.id/api/status/all`)
+      fetch(`http://100.64.178.105:5000/api/status/all`)
         .then(res => res.json())
         .then(data => setAllStatuses(data));
     };
@@ -110,7 +110,7 @@ export default function App() {
   }, [selectedDevice, userId]);
 
   const handleAddNewDevice = (newDevice) => {
-    fetch('https://api.aquasafe.my.id/api/devices', {
+    fetch('http://100.64.178.105:5000/api/devices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ device_id: newDevice.device_id, user_id: userId, nama_kolam: newDevice.nama_kolam })

@@ -13,7 +13,6 @@ app.use(express.json());
 // =================================================================
 // 1. KONEKSI KE DATABASE MYSQL (DOCKER)
 // =================================================================
-// PAKAI KODINGAN INI (Sistem Pool anti-putus):
 const db = mysql.createPool({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -43,7 +42,7 @@ app.post('/api/register', (req, res) => {
     db.query(sql, [nama, email, password], (err, results) => {
         if (err) {
             if (err.code === 'ER_DUP_ENTRY') {
-                return res.status(400).json({ success: false, message: 'Email ini udah terdaftar bosku!' });
+                return res.status(400).json({ success: false, message: 'Email sudah terdaftar!' });
             }
             return res.status(500).json({ success: false, message: err.message });
         }
@@ -104,11 +103,36 @@ app.post('/api/sensor/update', (req, res) => {
         if (err) console.error(`❌ Gagal log HTTP [${deviceId}]:`, err.message);
     });
 
-    res.json({ success: true, message: "Data mendarat dengan mulus!" });
+    const sql2 = 'SELECT pagi,sore,sekarang FROM Pakan LIMIT 1;';
+    db.query(sql2, (err, result) => {
+        if (err) {
+            console.error(`❌ Gagal mengambil data pakan:`, err);
+            return res.json({ success: true, message: "Data tersimpan, tapi gagal ambil pakan", data_pakan: null });
+        }
+
+        console.log("Data pakan dari DB:", result);
+
+        let datapakan;
+        if (result && result.length > 0) {
+            // Simpan datanya dulu untuk dikirim ke ESP32
+            datapakan = result[0];
+
+            if (result[0].sekarang > 0) {
+                // Hapus tanda tutup kurung yang salah sebelum koma, dan tambahkan di akhir
+                db.query('UPDATE Pakan SET sekarang=0;', (err, updateResult) => {
+                    if (err) {
+                        console.error(`❌ Gagal set 0`, err);
+                    }
+                }); // <-- Tutup kurung yang benar ada di sini
+            }
+        }
+
+        res.json({ success: true, message: "Data Berhasil tersimpan 123", data_pakan: datapakan });
+    });
 });
 
 // JALUR MQTT LOKAL (CADANGAN)
-const mqttClient = mqtt.connect('mqtt://mqtt:1883');
+const mqttClient = mqtt.connect('mqtt://100.64.178.105:1883');
 mqttClient.on('connect', () => {
     console.log('✅ Terhubung ke MQTT Broker Lokal!');
     mqttClient.subscribe('aquasafe/data/+', (err) => {
@@ -122,10 +146,12 @@ mqttClient.on('message', (topic, message) => {
         const deviceId = topic.split('/')[2];
 
         if (!currentData[deviceId]) {
-            currentData[deviceId] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0 };
+            currentData[deviceId] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0, pakansekarang: 0 };
         }
 
         currentData[deviceId] = { ...currentData[deviceId], ...data };
+
+
 
         const sql = `INSERT INTO sensor_logs (device_id, suhu, ph, do_level, tds, flow1, flow2, flow3, flow4) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
         const values = [deviceId, currentData[deviceId].suhu, currentData[deviceId].ph, currentData[deviceId].do, currentData[deviceId].tds, currentData[deviceId].flow1, currentData[deviceId].flow2, currentData[deviceId].flow3, currentData[deviceId].flow4];
@@ -178,6 +204,76 @@ app.get('/api/history/:deviceId', (req, res) => {
         res.json(results);
     });
 });
+
+app.get('/api/pakan', (req, res) => {
+    // JANGAN UBAH INI JADI 'SELECT sekarang' KARENA REACT BUTUH KOLOM 'pagi' DAN 'sore'
+    db.query('SELECT * FROM Pakan LIMIT 1', (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (results.length > 0) {
+            res.json(results[0]);
+        } else {
+            res.json({ pagi: '08:00', sore: '16:00', sekarang: 0 });
+        }
+    });
+});
+
+
+// =================================================================
+// 5. JALUR KONTROL AUTO-FEEDER (DARI WEB KE ALAT)
+// =================================================================
+app.post('/api/feeder/schedule', (req, res) => {
+    // Tangkap data dari web React
+    const { deviceId = "AQUA-COBA1", jadwalPagi, jadwalSore } = req.body;
+
+    // Bungkus datanya jadi JSON biar gampang dibaca ESP32
+    const payload = JSON.stringify({
+        perintah: "SET_JADWAL",
+        pagi: jadwalPagi,
+        sore: jadwalSore
+    });
+
+    // Bikin alamat topik khusus untuk alat tersebut
+    const topic = `aquasafe/kontrol/${deviceId}/feeder`;
+
+    // TERBANGKAN KE ESP32 LEWAT MQTT! 🚀
+    mqttClient.publish(topic, payload, (err) => {
+        if (err) {
+            console.error('❌ Gagal ngirim jadwal MQTT:', err);
+            return res.status(500).json({ success: false, message: 'Gagal ngirim ke alat' });
+        }
+        console.log(`✅ Jadwal Pakan terkirim via MQTT [${topic}]:`, payload);
+        res.json({ success: true, message: 'Jadwal pakan berhasil di-set!' });
+    });
+});
+
+app.post('/api/feeder/manual', (req, res) => {
+    const { deviceId = "AQUA-COBA1", action } = req.body; // action: 1 (On) or 0 (Off)
+
+    // Perintah manual feed ke ESP32
+    const payload = JSON.stringify({
+        perintah: action === 1 ? "BERI_MAKAN_SEKARANG" : "BERHENTI_MAKAN",
+        sekarang: action
+    });
+
+    const topic = `aquasafe/kontrol/${deviceId}/feeder`;
+
+    mqttClient.publish(topic, payload, (err) => {
+        if (err) {
+            console.error('❌ Gagal trigger manual feed MQTT:', err);
+            return res.status(500).json({ success: false, message: 'Gagal mengirim sinyal ke alat' });
+        }
+
+        // Update database jadi 1 atau 0 sesuai tombol yang dipencet
+        db.query('UPDATE Pakan SET sekarang = ?', [action], (err) => {
+            if (err) console.error(err);
+        });
+
+        console.log(`✅ Sinyal Manual Feed (${action}) terkirim via MQTT [${topic}]`);
+        res.json({ success: true, message: action === 1 ? 'Alat MENYALA!' : 'Alat BERHENTI!' });
+    });
+});
+
+
 
 app.listen(PORT, () => {
     console.log(`🚀 Server Backend Multi-Device berjalan pada port ${PORT}`);
