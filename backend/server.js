@@ -88,46 +88,52 @@ app.post('/api/sensor/update', (req, res) => {
     console.log(`📥 Data HTTP Masuk [${deviceId}]:`, data);
 
     if (!currentData[deviceId]) {
-        currentData[deviceId] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0 };
+        currentData[deviceId] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0 };
     }
 
     currentData[deviceId] = { ...currentData[deviceId], ...data };
 
-    const sql = `INSERT INTO sensor_logs (device_id, suhu, ph, do_level, tds, flow1, flow2, flow3, flow4) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    const sql = `INSERT INTO sensor_logs (device_id, suhu, ph, do_level, tds, flow1, flow2) VALUES (?, ?, ?, ?, ?, ?, ?)`;
     const values = [
         deviceId, data.suhu, data.ph, data.do, data.tds,
-        data.flow1, data.flow2, data.flow3, data.flow4
+        data.flow1, data.flow2
     ];
 
     db.query(sql, values, (err) => {
         if (err) console.error(`❌ Gagal log HTTP [${deviceId}]:`, err.message);
     });
 
-    const sql2 = 'SELECT pagi,sore,sekarang FROM Pakan LIMIT 1;';
-    db.query(sql2, (err, result) => {
+    const sql2 = 'SELECT * FROM Pakan WHERE device_id = ?;';
+    db.query(sql2, [deviceId], (err, result) => {
         if (err) {
             console.error(`❌ Gagal mengambil data pakan:`, err);
             return res.json({ success: true, message: "Data tersimpan, tapi gagal ambil pakan", data_pakan: null });
         }
 
-        console.log("Data pakan dari DB:", result);
+        console.log(`Data pakan dari DB [${deviceId}]:`, result);
 
         let datapakan;
         if (result && result.length > 0) {
             // Simpan datanya dulu untuk dikirim ke ESP32
             datapakan = result[0];
 
-            if (result[0].sekarang > 0) {
-                // Hapus tanda tutup kurung yang salah sebelum koma, dan tambahkan di akhir
-                db.query('UPDATE Pakan SET sekarang=0;', (err, updateResult) => {
-                    if (err) {
-                        console.error(`❌ Gagal set 0`, err);
-                    }
-                }); // <-- Tutup kurung yang benar ada di sini
-            }
+            // if (result[0].sekarang > 0) {
+            //     // Hapus tanda tutup kurung yang salah sebelum koma, dan tambahkan di akhir
+            //     db.query('UPDATE Pakan SET sekarang=0 WHERE device_id = ?;', [deviceId], (err, updateResult) => {
+            //         if (err) {
+            //             console.error(`❌ Gagal set 0 [${deviceId}]`, err);
+            //         }
+            //     });
+            // }
         }
 
-        res.json({ success: true, message: "Data Berhasil tersimpan 123", data_pakan: datapakan });
+        db.query('SELECT * FROM Pakan WHERE device_id = ?;', [deviceId], (err, result) => {
+            if (err || result.length === 0) {
+                return res.json({ success: true, data_pakan: null });
+            }
+
+            res.json({ success: true, message: "Data Berhasil tersimpan 123", data_pakan: datapakan });
+        });
     });
 });
 
@@ -185,7 +191,14 @@ app.post('/api/devices', (req, res) => {
     const sql = 'INSERT INTO devices (device_id, user_id, nama_kolam) VALUES (?, ?, ?)';
 
     db.query(sql, [device_id, user_id, nama_kolam], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) {
+            if (err.code === 'ER_DUP_ENTRY') {
+                console.error(`❌ Gagal: Device ID [${device_id}] sudah ada.`);
+                return res.status(400).json({ success: false, message: 'ID Perangkat sudah terdaftar atau sedang digunakan!' });
+            }
+            // Kalau error database lain:
+            return res.status(500).json({ success: false, message: err.message });
+        }
 
         currentData[device_id] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0 };
         res.json({ success: true, message: "Perangkat berhasil didaftarkan" });
@@ -199,20 +212,22 @@ app.get('/api/sensor/:deviceId', (req, res) => {
 
 app.get('/api/history/:deviceId', (req, res) => {
     const deviceId = req.params.deviceId;
-    db.query('SELECT * FROM sensor_logs WHERE device_id = ? ORDER BY id DESC LIMIT 15', [deviceId], (err, results) => {
+    db.query('SELECT * FROM sensor_logs WHERE device_id = ? ORDER BY id DESC LIMIT 400', [deviceId], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
     });
 });
 
-app.get('/api/pakan', (req, res) => {
+app.get('/api/pakan/:deviceId', (req, res) => {
+    const deviceId = req.params.deviceId;
     // JANGAN UBAH INI JADI 'SELECT sekarang' KARENA REACT BUTUH KOLOM 'pagi' DAN 'sore'
-    db.query('SELECT * FROM Pakan LIMIT 1', (err, results) => {
+    db.query('SELECT * FROM Pakan WHERE device_id = ?;', [deviceId], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
+
         if (results.length > 0) {
             res.json(results[0]);
         } else {
-            res.json({ pagi: '08:00', sore: '16:00', sekarang: 0 });
+            res.json({ device_id: deviceId, pagi: '08:00', sore: '16:00', sekarang: 0, gram_pagi: 70, gram_sore: 70, gram_manual: 70 });
         }
     });
 });
@@ -222,37 +237,52 @@ app.get('/api/pakan', (req, res) => {
 // 5. JALUR KONTROL AUTO-FEEDER (DARI WEB KE ALAT)
 // =================================================================
 app.post('/api/feeder/schedule', (req, res) => {
-    // Tangkap data dari web React
-    const { deviceId = "AQUA-COBA1", jadwalPagi, jadwalSore } = req.body;
+    const { deviceId, jadwalPagi, jadwalSore, gramPagi, gramSore } = req.body;
 
-    // Bungkus datanya jadi JSON biar gampang dibaca ESP32
     const payload = JSON.stringify({
         perintah: "SET_JADWAL",
         pagi: jadwalPagi,
         sore: jadwalSore
     });
 
-    // Bikin alamat topik khusus untuk alat tersebut
     const topic = `aquasafe/kontrol/${deviceId}/feeder`;
 
-    // TERBANGKAN KE ESP32 LEWAT MQTT! 🚀
     mqttClient.publish(topic, payload, (err) => {
         if (err) {
             console.error('❌ Gagal ngirim jadwal MQTT:', err);
             return res.status(500).json({ success: false, message: 'Gagal ngirim ke alat' });
         }
+
+        // LOGIKA BARU: Cek dulu datanya ada atau kosong
+        db.query('SELECT * FROM Pakan WHERE device_id = ?;', [deviceId], (checkErr, results) => {
+            if (checkErr) {
+                console.error('❌ Gagal cek tabel Pakan:', checkErr);
+            } else if (results.length > 0) {
+                // Kalau ada isinya, kita UPDATE
+                db.query('UPDATE Pakan SET pagi = ?, sore = ?, gram_pagi = ? , gram_sore = ? WHERE device_id = ?;', [jadwalPagi, jadwalSore, gramPagi, gramSore, deviceId], (errUpdate) => {
+                    if (errUpdate) console.error('❌ Gagal update DB:', errUpdate);
+                });
+            } else {
+                // Kalau KOSONG, kita bikin baris BARU (INSERT)
+                db.query('INSERT INTO Pakan (device_id, pagi, sore, sekarang, gram_pagi, gram_sore, gram_manual) VALUES (?, ?, ?, 0, ?, ?, 70)', [deviceId, jadwalPagi, jadwalSore, gramPagi, gramSore], (errInsert) => {
+                    if (errInsert) console.error('❌ Gagal insert DB:', errInsert);
+                });
+            }
+        });
+
         console.log(`✅ Jadwal Pakan terkirim via MQTT [${topic}]:`, payload);
-        res.json({ success: true, message: 'Jadwal pakan berhasil di-set!' });
+        res.json({ success: true, message: 'Jadwal dan gram pakan berhasil di-set!' });
     });
 });
 
 app.post('/api/feeder/manual', (req, res) => {
-    const { deviceId = "AQUA-COBA1", action } = req.body; // action: 1 (On) or 0 (Off)
+    const { deviceId, action, gramManual } = req.body; // action: 1 (On) or 0 (Off)
 
     // Perintah manual feed ke ESP32
     const payload = JSON.stringify({
         perintah: action === 1 ? "BERI_MAKAN_SEKARANG" : "BERHENTI_MAKAN",
-        sekarang: action
+        sekarang: action,
+        gram: gramManual
     });
 
     const topic = `aquasafe/kontrol/${deviceId}/feeder`;
@@ -264,7 +294,7 @@ app.post('/api/feeder/manual', (req, res) => {
         }
 
         // Update database jadi 1 atau 0 sesuai tombol yang dipencet
-        db.query('UPDATE Pakan SET sekarang = ?', [action], (err) => {
+        db.query('UPDATE Pakan SET sekarang = ?, gram_manual = ? WHERE device_id = ?;', [action, gramManual, deviceId], (err) => {
             if (err) console.error(err);
         });
 
