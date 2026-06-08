@@ -20,17 +20,20 @@ export default function EmptyState({ onOpenAddModal }) {
                 </div>
             </div>
 
-            {/* Teks Sambutan Elit */}
+            {/* Teks Sambutan yang Ramah & Manusiawi */}
             <div className="text-center max-w-lg mb-12 relative z-10 space-y-3">
                 <h1 className="text-4xl font-extrabold tracking-tight text-white drop-shadow-lg">
                     Selamat Datang di <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">AquaSafe</span>
                 </h1>
-                <p className="text-sm font-bold tracking-widest uppercase text-cyan-500 pb-1">
-                    Petualangan IoT Lu Dimulai Sekarang Bosku!
+
+                <p className="text-xs font-bold tracking-widest uppercase text-cyan-400 pb-1">
+                    Sistem Pemantauan Aquaponic
                 </p>
+
                 <div className="w-16 h-1 bg-gradient-to-r from-blue-500 to-cyan-400 mx-auto rounded-full mb-5" />
+
                 <p className="text-slate-400 text-sm leading-relaxed max-w-sm mx-auto">
-                    Kabin kontrol lu udah siap, tapi kita belum deteksi adanya node telemetri yang terdaftar. Yuk, tancepin ESP32 lu dan daftarin kolam pertama lu sekarang!
+                    Halo! Senang melihat Anda di sini. Akun Anda sudah siap, namun saat ini belum ada kolam yang terdaftar di sistem. Yuk, daftarkan kolam pertama Anda sekarang untuk mulai memantau kondisi air secara langsung!
                 </p>
             </div>
 

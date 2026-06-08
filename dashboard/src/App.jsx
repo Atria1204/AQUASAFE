@@ -34,7 +34,7 @@ export default function App() {
 
   const fetchDevices = () => {
     if (!userId) { setIsLoading(false); return; }
-    fetch(`http://100.64.178.105:5000/api/devices/${userId}`)
+    fetch(`https://api.aquasafe.my.id/api/devices/${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data && data.length > 0) {
@@ -64,12 +64,12 @@ export default function App() {
   useEffect(() => {
     if (!selectedDevice || !userId) return;
     const fetchData = () => {
-      fetch(`http://100.64.178.105:5000/api/sensor/${selectedDevice}`)
+      fetch(`https://api.aquasafe.my.id/api/sensor/${selectedDevice}`)
         .then(res => res.json())
         .then(data => { if (data.suhu !== undefined) setSensorData(data); })
         .catch(err => console.error("Gagal memuat sensor:", err));
 
-      fetch(`http://100.64.178.105:5000/api/history/${selectedDevice}`)
+      fetch(`https://api.aquasafe.my.id/api/history/${selectedDevice}`)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
@@ -99,7 +99,7 @@ export default function App() {
           }
         });
 
-      fetch(`http://100.64.178.105:5000/api/status/all`)
+      fetch(`https://api.aquasafe.my.id/api/status/all`)
         .then(res => res.json())
         .then(data => setAllStatuses(data));
     };
@@ -110,7 +110,7 @@ export default function App() {
   }, [selectedDevice, userId]);
 
   const handleAddNewDevice = (newDevice) => {
-    fetch('http://100.64.178.105:5000/api/devices', {
+    fetch('https://api.aquasafe.my.id/api/devices', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ device_id: newDevice.device_id, user_id: userId, nama_kolam: newDevice.nama_kolam })
@@ -126,29 +126,34 @@ export default function App() {
     return matchSearch && matchDate;
   });
 
-  // === PERUBAHAN 3: OTAK SATPAM ALARM LEBIH SENSITIF (HAPUS !== 0) ===
+  // === OTAK SATPAM ALARM DIPERBAIKI ===
+  const isMati = sensorData?.suhu === 0 && sensorData?.flow1 === 0;
   const activeAlarms = [];
 
-  if (sensorData?.power === false) {
-    activeAlarms.push({ time: 'SEKARANG', msg: 'PLN Terputus! Pakai Baterai.', type: 'critical' });
-  }
-  if (sensorData?.suhu > 30 || sensorData?.suhu < 24) {
-    activeAlarms.push({ time: 'LIVE', msg: `Suhu Air Bahaya: ${sensorData.suhu}°C`, type: 'warning' });
-  }
-  if (sensorData?.ph > 8.0 || sensorData?.ph < 6.0) {
-    activeAlarms.push({ time: 'LIVE', msg: `pH Level Bahaya: ${sensorData.ph}`, type: 'warning' });
-  }
-  if (sensorData?.do < 4.0) {
-    activeAlarms.push({ time: 'LIVE', msg: `Oksigen (DO) Drop: ${sensorData.do} mg/L`, type: 'warning' });
-  }
-  if (sensorData?.tds > 1000 || sensorData?.tds < 300) {
-    activeAlarms.push({ time: 'LIVE', msg: `TDS Nutrisi Bahaya: ${sensorData.tds} PPM`, type: 'warning' });
-  }
-  if (sensorData?.flow1 < 5.0) {
-    activeAlarms.push({ time: 'LIVE', msg: `Flow 1 Mampet: ${sensorData.flow1} L/m`, type: 'warning' });
-  }
-  if (sensorData?.flow2 < 5.0) {
-    activeAlarms.push({ time: 'LIVE', msg: `Flow 2 Mampet: ${sensorData.flow2} L/m`, type: 'warning' });
+  // Jika perangkat beneran terkoneksi dan ngalir data, baru satpamnya menyisir parameter!
+  if (!isMati) {
+    if (sensorData?.power === false) {
+      activeAlarms.push({ time: 'SEKARANG', msg: 'PLN Terputus! Pakai Baterai.', type: 'critical' });
+    }
+    if (sensorData?.suhu > 30 || sensorData?.suhu < 24) {
+      activeAlarms.push({ time: 'LIVE', msg: `Suhu Air Bahaya: ${sensorData.suhu}°C`, type: 'warning' });
+    }
+    if (sensorData?.ph > 8.0 || sensorData?.ph < 6.0) {
+      activeAlarms.push({ time: 'LIVE', msg: `pH Level Bahaya: ${sensorData.ph}`, type: 'warning' });
+    }
+    if (sensorData?.do < 4.0) {
+      activeAlarms.push({ time: 'LIVE', msg: `Oksigen (DO) Drop: ${sensorData.do} mg/L`, type: 'warning' });
+    }
+    if (sensorData?.tds > 1000 || sensorData?.tds < 300) {
+      activeAlarms.push({ time: 'LIVE', msg: `TDS Nutrisi Bahaya: ${sensorData.tds} PPM`, type: 'warning' });
+    }
+    // Jika Flow air bernilai 0 atau di bawah 5.0, alarm langsung teriak mampet!
+    if (sensorData?.flow1 < 5.0) {
+      activeAlarms.push({ time: 'LIVE', msg: `Flow 1 Mampet/Mati: ${sensorData.flow1} L/m`, type: 'warning' });
+    }
+    if (sensorData?.flow2 < 5.0) {
+      activeAlarms.push({ time: 'LIVE', msg: `Flow 2 Mampet/Mati: ${sensorData.flow2} L/m`, type: 'warning' });
+    }
   }
 
   const getDetailConfig = (sensorName) => {
