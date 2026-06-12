@@ -77,7 +77,8 @@ app.post('/api/login', (req, res) => {
 let currentData = {
     "AQUA-TEST": {
         suhu: 27.4, ph: 7.18, do: 8.5, tds: 440,
-        flow1: 12.5, flow2: 8.0, flow3: 4.2, flow4: 12.0
+        flow1: 12.5, flow2: 8.0, flow3: 4.2, flow4: 12.0,
+        lastUpdated: Date.now()
     }
 };
 
@@ -88,10 +89,10 @@ app.post('/api/sensor/update', (req, res) => {
     console.log(`📥 Data HTTP Masuk [${deviceId}]:`, data);
 
     if (!currentData[deviceId]) {
-        currentData[deviceId] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0 };
+        currentData[deviceId] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, lastUpdated: Date.now() };
     }
 
-    currentData[deviceId] = { ...currentData[deviceId], ...data };
+    currentData[deviceId] = { ...currentData[deviceId], ...data, lastUpdated: Date.now() };
 
     const sql = `INSERT INTO sensor_logs (device_id, suhu, ph, do_level, tds, flow1, flow2) VALUES (?, ?, ?, ?, ?, ?, ?)`;
     const values = [
@@ -152,10 +153,10 @@ mqttClient.on('message', (topic, message) => {
         const deviceId = topic.split('/')[2];
 
         if (!currentData[deviceId]) {
-            currentData[deviceId] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0, pakansekarang: 0 };
+            currentData[deviceId] = { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0, pakansekarang: 0, lastUpdated: Date.now() };
         }
 
-        currentData[deviceId] = { ...currentData[deviceId], ...data };
+        currentData[deviceId] = { ...currentData[deviceId], ...data, lastUpdated: Date.now() };
 
 
 
@@ -207,12 +208,57 @@ app.post('/api/devices', (req, res) => {
 
 app.get('/api/sensor/:deviceId', (req, res) => {
     const deviceId = req.params.deviceId;
-    res.json(currentData[deviceId] || { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0 });
+    
+    // Jika data di memori sudah ada dan valid, langsung kembalikan
+    if (currentData[deviceId] && currentData[deviceId].lastUpdated) {
+        return res.json(currentData[deviceId]);
+    }
+
+    // Jika memori kosong (misal karena backend baru restart), ambil 1 data terakhir dari database!
+    db.query('SELECT * FROM sensor_logs WHERE device_id = ? ORDER BY id DESC LIMIT 1', [deviceId], (err, results) => {
+        if (err || results.length === 0) {
+            return res.json(currentData[deviceId] || { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0 });
+        }
+        
+        const row = results[0];
+        // Masukkan data terakhir dari database ke memori agar alat tidak dikira 0
+        // Konversi format waktu MySQL ke timestamp js dengan memaksa timezone WIB (+07:00)
+        // karena server berjalan di UTC namun waktu database adalah WIB
+        const waktuWIB = row.waktu.replace(' ', 'T') + '+07:00';
+        let parsedDate = new Date(waktuWIB);
+        if (isNaN(parsedDate)) parsedDate = new Date(row.waktu);
+
+        currentData[deviceId] = {
+            suhu: row.suhu,
+            ph: row.ph,
+            do: row.do,
+            tds: row.tds,
+            flow1: row.flow1,
+            flow2: row.flow2,
+            flow3: row.flow3,
+            flow4: row.flow4,
+            lastUpdated: parsedDate.getTime()
+        };
+        
+        res.json(currentData[deviceId]);
+    });
 });
 
 app.get('/api/history/:deviceId', (req, res) => {
     const deviceId = req.params.deviceId;
-    db.query('SELECT * FROM sensor_logs WHERE device_id = ? ORDER BY id DESC LIMIT 400', [deviceId], (err, results) => {
+    const dateFilter = req.query.date;
+
+    let sql = 'SELECT * FROM sensor_logs WHERE device_id = ?';
+    let params = [deviceId];
+
+    if (dateFilter) {
+        sql += ' AND DATE(waktu) = ?';
+        params.push(dateFilter);
+    }
+
+    sql += ' ORDER BY id DESC LIMIT 400';
+
+    db.query(sql, params, (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
     });
@@ -303,6 +349,35 @@ app.post('/api/feeder/manual', (req, res) => {
     });
 });
 
+
+// =================================================================
+// 6. BACKGROUND JOB: MENGHITUNG RATA-RATA 24 JAM
+// =================================================================
+// Fungsi ini berjalan diam-diam setiap 1 menit untuk merekap nilai rata-rata tiap device
+setInterval(() => {
+    const deviceIds = Object.keys(currentData);
+    if (deviceIds.length === 0) return;
+
+    deviceIds.forEach(deviceId => {
+        const query = `
+            SELECT 
+                AVG(suhu) as avg_suhu,
+                AVG(ph) as avg_ph,
+                AVG(do_level) as avg_do,
+                AVG(tds) as avg_tds,
+                AVG(flow1) as avg_flow1,
+                AVG(flow2) as avg_flow2
+            FROM sensor_logs 
+            WHERE device_id = ? AND waktu >= NOW() - INTERVAL 24 HOUR
+        `;
+        db.query(query, [deviceId], (err, results) => {
+            if (!err && results.length > 0 && currentData[deviceId]) {
+                // Sisipkan data rata-rata langsung ke memory server
+                currentData[deviceId].avg24h = results[0];
+            }
+        });
+    });
+}, 60000); // 60000 ms = 1 menit
 
 
 app.listen(PORT, () => {
