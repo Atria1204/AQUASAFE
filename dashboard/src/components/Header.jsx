@@ -8,7 +8,8 @@ export default function Header({
     sensorData,
     activeAlarms,
     onOpenAddModal,
-    allStatuses
+    allStatuses,
+    userName
 }) {
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const dropdownRef = useRef(null);
@@ -24,7 +25,7 @@ export default function Header({
     }, []);
 
     // OTAK LENCANA KANAN
-    const isMati = sensorData?.suhu === 0 && sensorData?.flow1 === 0;
+    const isMati = !sensorData?.lastUpdated || (Date.now() - sensorData.lastUpdated > 300000);
     const isBermasalah = activeAlarms?.length > 0;
     const selectedDeviceName = devices?.find(d => d.device_id === selectedDevice)?.nama_kolam || 'Memuat...';
 
@@ -66,7 +67,9 @@ export default function Header({
                 <h1 className="text-3xl font-black bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent tracking-tight">
                     AQUASAFE
                 </h1>
-                <p className="text-slate-400 text-xs font-bold mt-1 tracking-[0.2em] uppercase">Dashboard</p>
+                <p className="text-slate-400 text-xs font-bold mt-1 tracking-[0.2em] uppercase">
+                    DASHBOARD &nbsp;&bull;&nbsp; HAI, {userName}
+                </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto relative z-40">

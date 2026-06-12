@@ -28,7 +28,7 @@ export default function Login({ onLogin }) {
                     setIsRegistering(false);
                     setPassword('');
                 } else {
-                    onLogin(data.userId);
+                    onLogin(data.userId, data.nama);
                 }
             } else {
                 setMessage({ text: data.message, type: 'error' });

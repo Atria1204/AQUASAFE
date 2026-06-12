@@ -21,7 +21,8 @@ export default function DetailView({
     setActiveDetail,
     detailData,
     chartData,
-    selectedDevice
+    selectedDevice,
+    sensorData
 }) {
 
     // === OTAK DETEKSI BAHAYA ===
@@ -46,7 +47,7 @@ export default function DetailView({
         glow: 'bg-red-400 animate-pulse' // Orbs di belakang kedap-kedip merah
     } : (detailTheme[activeDetail] || detailTheme['Suhu Air']);
 
-    // Fungsi pintar buat ngitung Nilai Tertinggi, Terendah, dan Rata-rata dari Grafik
+    // Fungsi pintar buat ngitung Nilai Tertinggi, Terendah, dan Rata-rata
     const stats = useMemo(() => {
         if (!chartData || chartData.length === 0) return { max: 0, min: 0, avg: 0 };
         const values = chartData.map(d => d.val).filter(v => !isNaN(v));
@@ -54,14 +55,24 @@ export default function DetailView({
 
         const max = Math.max(...values);
         const min = Math.min(...values);
-        const avg = values.reduce((a, b) => a + b, 0) / values.length;
+        let avg = values.reduce((a, b) => a + b, 0) / values.length; // Fallback rata-rata layar
+
+        // 🔥 OVERRIDE AVG: Pake data 24 jam dari backend kalau ada
+        if (sensorData?.avg24h) {
+            if (activeDetail === 'Suhu Air' && sensorData.avg24h.avg_suhu !== null) avg = sensorData.avg24h.avg_suhu;
+            else if (activeDetail === 'pH Level' && sensorData.avg24h.avg_ph !== null) avg = sensorData.avg24h.avg_ph;
+            else if (activeDetail === 'O2 Terlarut' && sensorData.avg24h.avg_do !== null) avg = sensorData.avg24h.avg_do;
+            else if (activeDetail === 'TDS Nutrisi' && sensorData.avg24h.avg_tds !== null) avg = sensorData.avg24h.avg_tds;
+            else if (activeDetail === 'Flow 1' && sensorData.avg24h.avg_flow1 !== null) avg = sensorData.avg24h.avg_flow1;
+            else if (activeDetail === 'Flow 2' && sensorData.avg24h.avg_flow2 !== null) avg = sensorData.avg24h.avg_flow2;
+        }
 
         return {
             max: max.toFixed(activeDetail === 'pH Level' ? 2 : 1),
             min: min.toFixed(activeDetail === 'pH Level' ? 2 : 1),
-            avg: avg.toFixed(activeDetail === 'pH Level' ? 2 : 1)
+            avg: (avg || 0).toFixed(activeDetail === 'pH Level' ? 2 : 1)
         };
-    }, [chartData, activeDetail]);
+    }, [chartData, activeDetail, sensorData]);
 
     // Tooltip Kustom buat Grafik
     const CustomTooltip = ({ active, payload, label }) => {
@@ -135,7 +146,7 @@ export default function DetailView({
                         <div className="backdrop-blur-xl bg-[#131b2c]/80 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-lg">
                             <Minus size={16} className="text-emerald-400 mb-2" />
                             <span className="text-lg font-black text-white">{stats.avg}</span>
-                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mt-1">Rata-Rata</span>
+                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mt-1">Rata-Rata (24 Jam)</span>
                         </div>
                         <div className="backdrop-blur-xl bg-[#131b2c]/80 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-lg">
                             <TrendingDown size={16} className="text-blue-400 mb-2" />
