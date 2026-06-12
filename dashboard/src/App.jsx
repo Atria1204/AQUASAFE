@@ -12,6 +12,7 @@ export default function App() {
   const [devices, setDevices] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [userId, setUserId] = useState(() => localStorage.getItem('userId') || null);
+  const [userName, setUserName] = useState(() => localStorage.getItem('userName') || 'Admin');
   const [selectedDevice, setSelectedDevice] = useState(() => localStorage.getItem('lastViewedDevice') || '');
   const [activeDetail, setActiveDetail] = useState(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -25,7 +26,9 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('userId');
     localStorage.removeItem('lastViewedDevice');
+    localStorage.removeItem('userName');
     setUserId(null);
+    setUserName('');
     setDevices([]);
     setSelectedDevice('');
     setSensorData({ suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, power: true });
@@ -69,7 +72,9 @@ export default function App() {
         .then(data => { if (data.suhu !== undefined) setSensorData(data); })
         .catch(err => console.error("Gagal memuat sensor:", err));
 
-      fetch(`https://api.aquasafe.my.id/api/history/${selectedDevice}`)
+      // === UBAH JALUR FETCH HISTORY AGAR NGIRIM PARAMETER TANGGAL KE BACKEND ===
+      const dateQuery = filterDate ? `?date=${filterDate}` : '';
+      fetch(`https://api.aquasafe.my.id/api/history/${selectedDevice}${dateQuery}`)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
@@ -107,7 +112,7 @@ export default function App() {
     fetchData();
     const interval = setInterval(fetchData, 2000);
     return () => clearInterval(interval);
-  }, [selectedDevice, userId]);
+  }, [selectedDevice, userId, filterDate]); // <-- Tambahkan filterDate ke array dependensi agar fetch terpicu ulang saat ganti tanggal
 
   const handleAddNewDevice = (newDevice) => {
     fetch('https://api.aquasafe.my.id/api/devices', {
@@ -127,21 +132,29 @@ export default function App() {
   });
 
   // === OTAK SATPAM ALARM DIPERBAIKI ===
-  const isMati = sensorData?.suhu === 0 && sensorData?.flow1 === 0;
+  // Jika server tidak menerima update lebih dari 5 menit (300000 ms), anggap mati!
+  const isMati = !sensorData?.lastUpdated || (Date.now() - sensorData.lastUpdated > 300000);
   const activeAlarms = [];
 
-  // Jika perangkat beneran terkoneksi dan ngalir data, baru satpamnya menyisir parameter!
-  if (!isMati) {
+  if (isMati) {
+    const lastUpdateDate = new Date(sensorData.lastUpdated);
+    const timeStr = isNaN(lastUpdateDate) ? 'SEKARANG' : lastUpdateDate.toLocaleTimeString('id-ID', { hour12: false }).substring(0, 5);
+    activeAlarms.push({ time: timeStr, msg: '🚨 PERANGKAT OFFLINE', type: 'critical' });
+  } else {
+    // Jika perangkat beneran terkoneksi dan ngalir data, baru satpamnya menyisir parameter!
+    if (sensorData?.pakanKosong === 1) {
+      activeAlarms.push({ time: 'SEKARANG', msg: '🚨 Stok Pakan Kosong! Segera Isi Ulang.', type: 'critical' });
+    }
     if (sensorData?.power === false) {
       activeAlarms.push({ time: 'SEKARANG', msg: 'PLN Terputus! Pakai Baterai.', type: 'critical' });
     }
     if (sensorData?.suhu > 30 || sensorData?.suhu < 24) {
       activeAlarms.push({ time: 'LIVE', msg: `Suhu Air Bahaya: ${sensorData.suhu}°C`, type: 'warning' });
     }
-    if (sensorData?.ph > 8.0 || sensorData?.ph < 6.0) {
+    if (sensorData?.ph > 8.0 || sensorData?.ph < 5.0) {
       activeAlarms.push({ time: 'LIVE', msg: `pH Level Bahaya: ${sensorData.ph}`, type: 'warning' });
     }
-    if (sensorData?.do < 4.0) {
+    if (sensorData?.do < 3.0) {
       activeAlarms.push({ time: 'LIVE', msg: `Oksigen (DO) Drop: ${sensorData.do} mg/L`, type: 'warning' });
     }
     if (sensorData?.tds > 1000 || sensorData?.tds < 300) {
@@ -158,8 +171,8 @@ export default function App() {
 
   const getDetailConfig = (sensorName) => {
     const isSuhuBahaya = sensorData.suhu > 30 || (sensorData.suhu < 24 && sensorData.suhu !== 0) || !sensorData.suhu;
-    const isPhBahaya = (sensorData.ph < 6.0 && sensorData.ph !== 0) || sensorData.ph > 8.0;
-    const isDoBahaya = (sensorData.do < 4.0 && sensorData.do !== 0);
+    const isPhBahaya = (sensorData.ph < 5.0 && sensorData.ph !== 0) || sensorData.ph > 8.0;
+    const isDoBahaya = (sensorData.do < 3.0 && sensorData.do !== 0);
     const isTdsBahaya = (sensorData.tds < 300 && sensorData.tds !== 0) || sensorData.tds > 1000;
     const isFlow1Bahaya = (sensorData.flow1 < 5.0 && sensorData.flow1 !== 0) || !sensorData.flow1;
     const isFlow2Bahaya = (sensorData.flow2 < 5.0 && sensorData.flow2 !== 0);
@@ -196,23 +209,30 @@ export default function App() {
 
   const sortedDevices = [...devices].sort((a, b) => {
     const getSeverity = (stat) => {
-      if (!stat || Object.keys(stat).length === 0 || (stat.suhu === 0 && stat.flow1 === 0)) return 0;
+      if (!stat || Object.keys(stat).length === 0) return 0;
       const isSuhuBahaya = stat.suhu > 30 || (stat.suhu < 24 && stat.suhu !== 0);
-      const isPhBahaya = (stat.ph < 6.0 && stat.ph !== 0) || stat.ph > 8.0;
-      const isDoBahaya = stat.do < 4.0 && stat.do !== 0;
+      const isPhBahaya = (stat.ph < 5.0 && stat.ph !== 0) || stat.ph > 8.0;
+      const isDoBahaya = stat.do < 3.0 && stat.do !== 0;
       const isTdsBahaya = (stat.tds < 300 && stat.tds !== 0) || stat.tds > 1000;
       const isFlow1Bahaya = stat.flow1 < 5.0 && stat.flow1 !== 0;
       const isFlow2Bahaya = stat.flow2 < 5.0 && stat.flow2 !== 0;
       const isPowerMati = stat.power === false;
+      const isDeviceMati = !stat.lastUpdated || (Date.now() - stat.lastUpdated > 300000);
+      const isPakanKosong = stat.pakanKosong === 1;
 
-      if (isSuhuBahaya || isPhBahaya || isDoBahaya || isTdsBahaya || isFlow1Bahaya || isFlow2Bahaya || isPowerMati) return 2;
+      if (isSuhuBahaya || isPhBahaya || isDoBahaya || isTdsBahaya || isFlow1Bahaya || isFlow2Bahaya || isPowerMati || isDeviceMati || isPakanKosong) return 2;
       return 1;
     };
     return getSeverity(allStatuses[b.device_id] || {}) - getSeverity(allStatuses[a.device_id] || {});
   });
 
   if (!userId) {
-    return <Login onLogin={(id) => { setUserId(id); localStorage.setItem('userId', id) }} />;
+    return <Login onLogin={(id, nama) => { 
+        setUserId(id); 
+        setUserName(nama || 'Admin');
+        localStorage.setItem('userId', id);
+        if (nama) localStorage.setItem('userName', nama);
+    }} />;
   }
 
   return (
@@ -228,7 +248,7 @@ export default function App() {
         </span>
       </button>
 
-      <Header devices={sortedDevices} selectedDevice={selectedDevice} setSelectedDevice={setSelectedDevice} sensorData={sensorData} activeAlarms={activeAlarms} onOpenAddModal={() => setIsAddModalOpen(true)} allStatuses={allStatuses} />
+      <Header devices={sortedDevices} selectedDevice={selectedDevice} setSelectedDevice={setSelectedDevice} sensorData={sensorData} activeAlarms={activeAlarms} onOpenAddModal={() => setIsAddModalOpen(true)} allStatuses={allStatuses} userName={userName} />
 
       <AddDeviceModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAdd={handleAddNewDevice} />
 
@@ -258,6 +278,7 @@ export default function App() {
             activeDetail={activeDetail}
             setActiveDetail={setActiveDetail}
             detailData={getDetailConfig(activeDetail)}
+            sensorData={sensorData} // 🔥 KIRIM DATA SENSOR (YANG ADA RATA-RATANYA)
             // === OTAK PEMILIH DATA GRAFIK (DINAMIS) ===
             chartData={tableData.slice(0, 15).reverse().map(d => {
               let chartVal = 0;
