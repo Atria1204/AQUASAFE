@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import {
     Activity, AlertTriangle, CheckCircle2,
     Thermometer, FlaskConical, Wind, Leaf,
-    Waves, DatabaseBackup, Calendar, Timer
+    Waves, DatabaseBackup, Calendar, Timer,
+    Sun, Moon, XCircle, RefreshCcw, Play
 } from 'lucide-react';
 
 // =================================================================
@@ -50,7 +51,7 @@ const sensorConfig = {
 // =================================================================
 // SUB-KOMPONEN: KARTU SENSOR BERGAYA GLASSMORPHISM
 // =================================================================
-const GlassSensorCard = ({ title, valueKey, sensorData, setActiveDetail }) => {
+const GlassSensorCard = ({ title, valueKey, sensorData, setActiveDetail, className = "" }) => {
     const cfg = sensorConfig[title];
     const val = sensorData?.[valueKey];
     const displayValue = val !== undefined ? val.toFixed(title === 'pH Level' ? 2 : 1) : '0.0';
@@ -75,7 +76,7 @@ const GlassSensorCard = ({ title, valueKey, sensorData, setActiveDetail }) => {
     return (
         <div
             onClick={() => setActiveDetail(title)}
-            className={`group relative cursor-pointer backdrop-blur-2xl bg-gradient-to-br ${bgBase} p-5 rounded-3xl h-36 flex flex-col justify-between border ${border} hover:border-white/60 transition-all duration-500 ease-out hover:-translate-y-2 hover:scale-[1.03] ${glow} overflow-hidden shadow-lg hover:z-10`}
+            className={`group relative cursor-pointer backdrop-blur-2xl bg-gradient-to-br ${bgBase} p-5 rounded-3xl h-36 flex flex-col justify-between border ${border} hover:border-white/60 transition-all duration-500 ease-out hover:-translate-y-2 hover:scale-[1.03] ${glow} overflow-hidden shadow-lg hover:z-10 ${className}`}
         >
             <div className={`absolute -inset-10 opacity-0 group-hover:opacity-40 transition-all duration-700 ease-out rounded-full blur-[45px] group-hover:scale-130 ${bgGlow}`} />
             <div className={`absolute -right-3 -bottom-3 opacity-[0.25] group-hover:opacity-[0.4] transition-all duration-700 ease-out pointer-events-none transform group-hover:scale-130 group-hover:-rotate-12 ${text}`}>
@@ -116,7 +117,7 @@ export default function Overview({
     setFilterDate
 }) {
 
-    const isMati = sensorData?.suhu === 0 && sensorData?.flow1 === 0;
+    const isMati = !sensorData?.lastUpdated || (Date.now() - sensorData.lastUpdated > 300000);
     const isBermasalah = activeAlarms?.length > 0;
 
     // Laci memori penampung data resmi database lokal React
@@ -137,6 +138,14 @@ export default function Overview({
     // 🔥 KUNCI UTAMA: Pisahkan memori server (saved) dan ketikan user (input)
     const [savedGramManual, setSavedGramManual] = useState(70);
     const [inputGramManual, setInputGramManual] = useState('');
+
+    // 🔥 KODE BARU: State untuk waktu saat ini
+    const [currentTime, setCurrentTime] = useState(new Date());
+
+    useEffect(() => {
+        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     // =================================================================
     // LOGIKA POLLING: MENGAMBIL DATA DARI SERVER TIAP 2 DETIK
@@ -306,6 +315,11 @@ export default function Overview({
         }
     };
 
+    // Logika penentuan status sudah/belum
+    // SEKARANG MENGGUNAKAN DATA LANGSUNG DARI ALAT ESP32 (HARDWARE SOURCE OF TRUTH)
+    const sudahPagi = sensorData?.sudahPakan1 === 1 || sensorData?.sudahPakan1 === true;
+    const sudahSore = sensorData?.sudahPakan2 === 1 || sensorData?.sudahPakan2 === true;
+
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
@@ -328,139 +342,91 @@ export default function Overview({
             `}</style>
 
             <div className="xl:col-span-3 flex flex-col gap-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5">
-                    <GlassSensorCard title="Suhu Air" valueKey="suhu" sensorData={sensorData} setActiveDetail={setActiveDetail} />
-                    <GlassSensorCard title="pH Level" valueKey="ph" sensorData={sensorData} setActiveDetail={setActiveDetail} />
-                    <GlassSensorCard title="O2 Terlarut" valueKey="do" sensorData={sensorData} setActiveDetail={setActiveDetail} />
-                    <GlassSensorCard title="TDS Nutrisi" valueKey="tds" sensorData={sensorData} setActiveDetail={setActiveDetail} />
-                    <GlassSensorCard title="Flow 1" valueKey="flow1" sensorData={sensorData} setActiveDetail={setActiveDetail} />
-                    <GlassSensorCard title="Flow 2" valueKey="flow2" sensorData={sensorData} setActiveDetail={setActiveDetail} />
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-5 xl:h-[308px] shrink-0">
+                    <GlassSensorCard className="order-1 md:order-none" title="Suhu Air" valueKey="suhu" sensorData={sensorData} setActiveDetail={setActiveDetail} />
+                    <GlassSensorCard className="order-2 md:order-none" title="pH Level" valueKey="ph" sensorData={sensorData} setActiveDetail={setActiveDetail} />
+                    <GlassSensorCard className="order-3 md:order-none" title="O2 Terlarut" valueKey="do" sensorData={sensorData} setActiveDetail={setActiveDetail} />
 
-                    <div className="col-span-2 md:col-span-2 group relative backdrop-blur-2xl bg-gradient-to-br from-indigo-950/80 to-slate-900/80 p-4 rounded-3xl h-36 flex flex-col justify-between border border-indigo-500/30 hover:border-indigo-400/50 transition-all duration-500 shadow-xl overflow-hidden">
+                    {/* KONTROL AUTO-FEEDER (1 KOLOM 2 BARIS) */}
+                    <div className="order-last md:order-none col-span-2 md:col-span-1 row-span-2 group relative backdrop-blur-2xl bg-gradient-to-br from-indigo-950/80 to-slate-900/80 p-4 rounded-3xl h-full flex flex-col border border-indigo-500/30 hover:border-indigo-400/50 transition-all duration-500 shadow-xl overflow-hidden cursor-default">
                         <div className="absolute -right-6 -bottom-6 opacity-5 text-indigo-300 pointer-events-none transform group-hover:scale-110 group-hover:-rotate-12 transition-transform duration-700">
                             <Timer size={100} />
                         </div>
 
-                        <div className="flex justify-between items-center relative z-10 mb-2">
+                        <div className="flex justify-between items-center relative z-10 mb-1.5">
                             <div className="flex items-center gap-2">
-                                <div className="p-1 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-inner">
-                                    <Timer size={12} />
+                                <div className="p-1.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-inner">
+                                    <Timer size={14} />
                                 </div>
-                                <h3 className="text-[10px] uppercase font-black tracking-widest text-indigo-100 drop-shadow-md">
-                                    Kontrol Auto-Feeder
+                                <h3 className="text-xs uppercase font-black tracking-widest text-indigo-100 drop-shadow-md">
+                                    Auto-Feeder
                                 </h3>
                             </div>
                         </div>
 
-                        <div className="flex flex-row gap-3 relative z-10 w-full h-full items-center">
-
-                            <div className="flex flex-col gap-1.5 w-[58%] justify-center h-full">
-                                {/* WIDGET PAGI */}
-                                <div className="flex items-center justify-between bg-black/40 px-2 py-1.5 rounded-xl border border-white/5 shadow-sm">
-                                    <div className="flex flex-col min-w-[65px]">
-                                        <span className="text-[7px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Jadwal Pagi</span>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-[11px] font-black text-white tracking-tight">{savedPagi}</span>
-                                            <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[7px] font-bold px-1 py-0.5 rounded leading-none">{savedGramPagi}g</span>
+                        <div className="flex flex-col justify-between relative z-10 w-full h-full mt-1.5">
+                            {/* TOP SECTION: Matches Row 1 */}
+                            <div className="flex flex-col gap-1.5">
+                                {/* Pagi */}
+                                <div className="flex flex-col bg-black/40 px-3 py-1.5 rounded-xl border border-white/5 shadow-sm gap-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase">Jadwal Pagi</span>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-sm font-black text-white tracking-tight">{savedPagi}</span>
+                                            <span className="text-[10px] font-bold text-indigo-300">({savedGramPagi}g)</span>
                                         </div>
                                     </div>
-
-                                    <div className="flex items-center gap-1">
-                                        <input
-                                            type="time"
-                                            value={inputPagi}
-                                            onChange={(e) => setInputPagi(e.target.value)}
-                                            className="bg-white/5 border border-white/10 rounded-md text-white text-[9px] font-bold w-[65px] px-1.5 py-1 [color-scheme:dark] focus:outline-none focus:border-indigo-400 transition-colors"
-                                        />
-                                        <div className="relative flex items-center">
-                                            <input
-                                                type="number"
-                                                placeholder="Gr"
-                                                value={inputGramPagi}
-                                                onChange={(e) => {
-                                                    let val = e.target.value;
-                                                    if (val === '') setInputGramPagi('');
-                                                    else if (val >= 0 && val <= 140) setInputGramPagi(parseInt(val).toString());
-                                                    else if (val > 140) setInputGramPagi('140');
-                                                }}
-                                                className="bg-white/5 border border-white/10 rounded-md text-white text-[9px] font-bold w-[45px] pl-1.5 pr-3 py-1 focus:outline-none focus:border-indigo-400 transition-colors text-center"
-                                            />
+                                    <div className="flex items-center gap-1.5 justify-between w-full">
+                                        <div className="flex gap-1.5 flex-1">
+                                            <input type="time" value={inputPagi} onChange={(e) => setInputPagi(e.target.value)} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[80px] px-2 py-1 focus:outline-none focus:border-indigo-400" />
+                                            <input type="number" placeholder={savedGramPagi.toString()} value={inputGramPagi} onChange={(e) => { let val = e.target.value; if (val === '') setInputGramPagi(''); else if (val >= 0 && val <= 140) setInputGramPagi(parseInt(val).toString()); else if (val > 140) setInputGramPagi('140'); }} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[45px] px-1 py-1 text-center focus:outline-none focus:border-indigo-400" />
                                         </div>
-                                        <button onClick={() => handleSetPakan('pagi')} className="bg-indigo-600 text-white text-[8px] px-2 py-1 rounded-md hover:bg-indigo-500 font-black tracking-wide transition-colors">SET</button>
+                                        <button onClick={() => handleSetPakan('pagi')} className="bg-indigo-600 text-white text-[9px] px-3 py-1 rounded-md hover:bg-indigo-500 font-black tracking-wide ml-1 shrink-0 shadow-sm">SET</button>
                                     </div>
                                 </div>
 
-                                {/* WIDGET SORE */}
-                                <div className="flex items-center justify-between bg-black/40 px-2 py-1.5 rounded-xl border border-white/5 shadow-sm">
-                                    <div className="flex flex-col min-w-[65px]">
-                                        <span className="text-[7px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Jadwal Sore</span>
-                                        <div className="flex items-center gap-1.5">
-                                            <span className="text-[11px] font-black text-white tracking-tight">{savedSore}</span>
-                                            <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[7px] font-bold px-1 py-0.5 rounded leading-none">{savedGramSore}g</span>
+                                {/* Sore */}
+                                <div className="flex flex-col bg-black/40 px-3 py-1.5 rounded-xl border border-white/5 shadow-sm gap-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase">Jadwal Sore</span>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-sm font-black text-white tracking-tight">{savedSore}</span>
+                                            <span className="text-[10px] font-bold text-indigo-300">({savedGramSore}g)</span>
                                         </div>
                                     </div>
-
-                                    <div className="flex items-center gap-1">
-                                        <input
-                                            type="time"
-                                            value={inputSore}
-                                            onChange={(e) => setInputSore(e.target.value)}
-                                            className="bg-white/5 border border-white/10 rounded-md text-white text-[9px] font-bold w-[65px] px-1.5 py-1 [color-scheme:dark] focus:outline-none focus:border-indigo-400 transition-colors"
-                                        />
-                                        <div className="relative flex items-center">
-                                            <input
-                                                type="number"
-                                                placeholder="Gr"
-                                                value={inputGramSore}
-                                                onChange={(e) => {
-                                                    let val = e.target.value;
-                                                    if (val === '') setInputGramSore('');
-                                                    else if (val >= 0 && val <= 140) setInputGramSore(parseInt(val).toString());
-                                                    else if (val > 140) setInputGramSore('140');
-                                                }}
-                                                className="bg-white/5 border border-white/10 rounded-md text-white text-[9px] font-bold w-[45px] pl-1.5 pr-3 py-1 focus:outline-none focus:border-indigo-400 transition-colors text-center"
-                                            />
+                                    <div className="flex items-center gap-1.5 justify-between w-full">
+                                        <div className="flex gap-1.5 flex-1">
+                                            <input type="time" value={inputSore} onChange={(e) => setInputSore(e.target.value)} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[80px] px-2 py-1 focus:outline-none focus:border-indigo-400" />
+                                            <input type="number" placeholder={savedGramSore.toString()} value={inputGramSore} onChange={(e) => { let val = e.target.value; if (val === '') setInputGramSore(''); else if (val >= 0 && val <= 140) setInputGramSore(parseInt(val).toString()); else if (val > 140) setInputGramSore('140'); }} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[45px] px-1 py-1 text-center focus:outline-none focus:border-indigo-400" />
                                         </div>
-                                        <button onClick={() => handleSetPakan('sore')} className="bg-indigo-600 text-white text-[8px] px-2 py-1 rounded-md hover:bg-indigo-500 font-black tracking-wide transition-colors">SET</button>
+                                        <button onClick={() => handleSetPakan('sore')} className="bg-indigo-600 text-white text-[9px] px-3 py-1 rounded-md hover:bg-indigo-500 font-black tracking-wide ml-1 shrink-0 shadow-sm">SET</button>
                                     </div>
                                 </div>
                             </div>
-
-                            {/* KANAN: Manual Feed */}
-                            <div className="flex flex-col gap-1.5 w-[42%] justify-center h-full border-l border-white/[0.08] pl-3">
-                                <div className="flex items-center justify-between bg-black/40 px-2 py-1.5 rounded-xl border border-white/5 shadow-sm">
-                                    <span className="text-[8px] font-bold text-slate-300 uppercase tracking-widest">Dosis Instan</span>
-                                    <div className="relative flex items-center">
-                                        <input
-                                            type="number"
-                                            placeholder={savedGramManual.toString()} // 🔥 Trik Placeholder Transparan
-                                            value={inputGramManual}
-                                            onChange={(e) => {
-                                                let val = e.target.value;
-                                                if (val === '') setInputGramManual('');
-                                                else if (val >= 0 && val <= 140) setInputGramManual(parseInt(val).toString());
-                                                else if (val > 140) setInputGramManual('140');
-                                            }}
-                                            className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-black focus:outline-none focus:border-indigo-400 text-center w-[50px] py-1 pr-3 placeholder:text-white/40"
-                                        />
-                                        <span className="absolute right-1.5 text-[8px] font-bold text-slate-400 pointer-events-none">g</span>
+                            
+                            {/* BOTTOM SECTION: Matches Row 2 */}
+                            <div className="flex flex-col justify-center bg-black/40 px-4 py-2.5 rounded-2xl border border-white/5 shadow-sm mt-auto">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex flex-col">
+                                        <span className="text-[9px] font-bold tracking-widest text-slate-400 uppercase mb-0.5">Instan</span>
+                                        <span className="text-[8px] font-medium text-slate-500">Pemberian Manual</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <input type="number" placeholder={savedGramManual.toString()} value={inputGramManual} onChange={(e) => { let val = e.target.value; if (val === '') setInputGramManual(''); else if (val >= 0 && val <= 140) setInputGramManual(parseInt(val).toString()); else if (val > 140) setInputGramManual('140'); }} className="bg-white/5 border border-white/10 rounded-lg text-white text-[11px] font-bold w-[45px] px-1.5 py-1 text-center focus:outline-none focus:border-indigo-400" />
+                                        <span className="text-[9px] font-bold text-slate-400">g</span>
                                     </div>
                                 </div>
-
-                                <button
-                                    onClick={handleToggleClick}
-                                    className={`flex-1 flex items-center justify-center gap-1.5 text-white text-[9px] font-black tracking-widest uppercase rounded-xl border transition-all duration-300 h-full ${isManualFeedOn
-                                        ? "bg-gradient-to-r from-red-600 to-red-500 border-red-400/50 shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
-                                        : "bg-gradient-to-r from-emerald-600 to-teal-500 border-emerald-400/50 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] hover:-translate-y-0.5"
-                                        }`}
-                                    type="button"
-                                >
-                                    <Timer size={14} className={isManualFeedOn ? "animate-spin" : ""} />
-                                    <span>{isManualFeedOn ? "STOP MOTOR" : "MAKAN INSTAN"}</span>
+                                <button onClick={handleToggleClick} className={`w-full flex items-center justify-center gap-2 text-white text-[9px] font-black tracking-widest uppercase rounded-xl border py-2 px-4 ${isManualFeedOn ? "bg-red-600 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse" : "bg-emerald-600 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:-translate-y-1 transition-transform duration-300"}`}>
+                                    <Timer size={13} className={isManualFeedOn ? "animate-spin" : ""} />
+                                    <span>{isManualFeedOn ? "STOP PEMBERIAN" : "BERI PAKAN SEKARANG"}</span>
                                 </button>
                             </div>
                         </div>
                     </div>
+
+                    <GlassSensorCard className="order-5 md:order-none" title="Flow 1" valueKey="flow1" sensorData={sensorData} setActiveDetail={setActiveDetail} />
+                    <GlassSensorCard className="order-6 md:order-none" title="Flow 2" valueKey="flow2" sensorData={sensorData} setActiveDetail={setActiveDetail} />
+                    <GlassSensorCard className="order-4 md:order-none" title="TDS Nutrisi" valueKey="tds" sensorData={sensorData} setActiveDetail={setActiveDetail} />
                 </div>
 
                 {/* TABEL CATATAN LOG RIWAYAT */}
@@ -547,7 +513,7 @@ export default function Overview({
 
             {/* SIDEBAR LOG ALARM DAN INFORMASI STATUS TELEMETRI KANAN */}
             <div className="flex flex-col gap-6 h-full">
-                <div className="backdrop-blur-xl bg-[#131b2c]/95 border border-white/10 rounded-[2rem] p-6 flex flex-col relative overflow-hidden flex-1 shadow-xl">
+                <div className="backdrop-blur-xl bg-[#131b2c]/95 border border-white/10 rounded-[2rem] p-6 flex flex-col relative overflow-hidden xl:h-[308px] shrink-0 shadow-xl">
                     <AlertTriangle className={`absolute -right-8 -bottom-8 w-40 h-40 opacity-[0.03] pointer-events-none ${activeAlarms.length > 0 ? 'text-red-400 animate-pulse opacity-[0.09]' : 'text-slate-500'}`} />
 
                     <div className="flex items-center justify-between mb-4 border-b border-white/[0.05] pb-4 relative z-10">
@@ -582,36 +548,122 @@ export default function Overview({
                     </div>
                 </div>
 
-                <div className="backdrop-blur-xl bg-[#131b2c]/95 border border-white/10 rounded-[2rem] p-6 h-fit flex flex-col justify-between relative overflow-hidden shadow-xl">
-                    <div className={`absolute -right-10 -bottom-10 w-40 h-40 rounded-full blur-[65px] pointer-events-none ${isMati ? 'bg-red-500/20' : isBermasalah ? 'bg-yellow-500/20' : 'bg-cyan-500/20'}`} />
+                    {/* WIDGET KOMBINASI: TRACKING PAKAN, STOK & KONEKSI ALAT */}
+                    <div className="backdrop-blur-xl bg-gradient-to-b from-[#131b2c]/95 to-[#0a0f1a]/95 border border-cyan-500/20 shadow-xl hover:shadow-[0_0_20px_rgba(34,211,238,0.1)] rounded-3xl p-5 xl:h-[380px] shrink-0 flex flex-col relative overflow-hidden transition-all duration-500">
+                        <div className="absolute -right-5 -top-5 w-32 h-32 bg-cyan-500/10 rounded-full blur-[40px] pointer-events-none" />
 
-                    <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Status Node Telemetri</h3>
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${isMati ? 'bg-red-500/25 text-red-300 border-red-500/45' : isBermasalah ? 'bg-yellow-500/25 text-yellow-300 border-yellow-500/45' : 'bg-cyan-500/25 text-cyan-300 border-cyan-500/45'}`}>
-                                {isMati ? 'TERPUTUS' : isBermasalah ? 'PERINGATAN' : 'TERKALIBRASI'}
-                            </span>
+                    <div className="flex items-center justify-between mb-1.5 relative z-10 border-b border-white/[0.05] pb-1.5">
+                        <div className="flex items-center gap-2 font-bold text-slate-200">
+                            <div className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-inner">
+                                <Timer size={12} className="animate-pulse" />
+                            </div>
+                            <h2 className="text-[9px] uppercase tracking-widest font-black text-white drop-shadow-sm">Sistem & Pakan</h2>
                         </div>
-
-                        <p className="text-xl font-bold text-white">{selectedDevice || 'Memuat...'}</p>
-                        <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-                            {isMati
-                                ? "Sistem tidak mendeteksi aliran perangkat. Periksa power alat."
-                                : "Akurasi metrik dikoreksi secara terpusat oleh mesin Cloud Auto-Offset."}
-                        </p>
                     </div>
 
-                    <div className="pt-4 mt-4 border-t border-white/[0.05] text-[11px] text-slate-300 space-y-2.5 relative z-10">
-                        <div className="flex justify-between items-center">
-                            <span>Koneksi Hardware:</span>
-                            <span className={`font-bold flex items-center gap-1.5 ${isMati ? 'text-red-400' : 'text-emerald-400'}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${isMati ? 'bg-red-400' : 'bg-emerald-400 animate-pulse'}`} />
-                                {isMati ? 'DISCONNECTED' : 'SECURE'}
-                            </span>
+                    <div className="flex flex-col justify-between flex-1 gap-4 relative z-10 mt-1.5 mb-0.5">
+                        {/* Header Kolom Jelas */}
+                        <div className="flex justify-between items-center px-2 mb-[-6px]">
+                            <span className="text-[7px] font-black text-slate-500 tracking-widest uppercase">Jadwal / Stok</span>
+                            <span className="text-[7px] font-black text-slate-500 tracking-widest uppercase">Status</span>
                         </div>
-                        <div className="flex justify-between items-center">
-                            <span>Periode Kalibrasi:</span>
-                            <span className="text-slate-300 font-mono text-xs bg-black/35 px-2 py-0.5 rounded border border-white/5">Otomatis (Server)</span>
+
+                        {/* Baris Pagi */}
+                        <div className="group flex justify-between items-center bg-gradient-to-r from-blue-900/20 to-transparent hover:from-blue-800/30 py-1.5 px-3 rounded-xl border border-blue-500/10 hover:border-blue-400/30 transition-all duration-300">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-6 h-6 rounded-full bg-blue-500/20 flex items-center justify-center border border-blue-400/30 shadow-[0_0_10px_rgba(59,130,246,0.2)] text-blue-300 group-hover:scale-110 transition-transform">
+                                    <Sun size={12} className="animate-spin-slow" style={{ animationDuration: '10s' }} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[11px] font-black text-white tracking-wide">Jadwal Pagi</span>
+                                    <span className="text-[8px] font-bold text-blue-300 font-mono tracking-widest bg-black/40 px-1 rounded mt-0.5 w-fit border border-blue-500/20">{savedPagi}</span>
+                                </div>
+                            </div>
+                            {sudahPagi ? (
+                                <span className="flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(16,185,129,0.2)] group-hover:bg-emerald-500/30 transition-colors">
+                                    <CheckCircle2 size={10} strokeWidth={2.5} /> Selesai
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-1.5 bg-red-500/15 text-red-400 border border-red-500/30 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(239,68,68,0.1)] group-hover:bg-red-500/25 transition-colors">
+                                    <XCircle size={10} strokeWidth={2.5} /> Belum
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Baris Sore */}
+                        <div className="group flex justify-between items-center bg-gradient-to-r from-indigo-900/20 to-transparent hover:from-indigo-800/30 py-1.5 px-3 rounded-xl border border-indigo-500/10 hover:border-indigo-400/30 transition-all duration-300">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-400/30 shadow-[0_0_10px_rgba(99,102,241,0.2)] text-indigo-300 group-hover:scale-110 transition-transform">
+                                    <Moon size={11} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[11px] font-black text-white tracking-wide">Jadwal Sore</span>
+                                    <span className="text-[8px] font-bold text-indigo-300 font-mono tracking-widest bg-black/40 px-1 rounded mt-0.5 w-fit border border-indigo-500/20">{savedSore}</span>
+                                </div>
+                            </div>
+                            {sudahSore ? (
+                                <span className="flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(16,185,129,0.2)] group-hover:bg-emerald-500/30 transition-colors">
+                                    <CheckCircle2 size={10} strokeWidth={2.5} /> Selesai
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-1.5 bg-red-500/15 text-red-400 border border-red-500/30 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(239,68,68,0.1)] group-hover:bg-red-500/25 transition-colors">
+                                    <XCircle size={10} strokeWidth={2.5} /> Belum
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Baris Stok Pakan */}
+                        <div className="group flex justify-between items-center bg-gradient-to-r from-slate-800/40 to-transparent hover:from-slate-700/40 py-1.5 px-3 rounded-xl border border-slate-500/20 hover:border-slate-400/30 transition-all duration-300">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-6 h-6 rounded-full bg-slate-500/20 flex items-center justify-center border border-slate-400/30 shadow-[0_0_10px_rgba(100,116,139,0.2)] text-slate-300 group-hover:scale-110 transition-transform">
+                                    <DatabaseBackup size={11} />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[11px] font-black text-white tracking-wide">Stok Pakan</span>
+                                    <span className="text-[8px] font-bold text-slate-400 font-mono tracking-widest bg-black/40 px-1 rounded mt-0.5 w-fit border border-slate-500/20">IR Sensor</span>
+                                </div>
+                            </div>
+
+                            {sensorData?.pakanKosong === 1 ? (
+                                <span className="flex items-center justify-center gap-1.5 bg-red-500/15 text-red-400 border border-red-500/30 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(239,68,68,0.1)] group-hover:bg-red-500/25 transition-colors">
+                                    <XCircle size={10} strokeWidth={2.5} className="animate-pulse" /> Isi Ulang
+                                </span>
+                            ) : sensorData?.pakanKosong === 0 ? (
+                                <span className="flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(16,185,129,0.2)] group-hover:bg-emerald-500/30 transition-colors">
+                                    <CheckCircle2 size={10} strokeWidth={2.5} /> Aman
+                                </span>
+                            ) : (
+                                <span className="flex items-center justify-center gap-1.5 bg-slate-500/15 text-slate-400 border border-slate-500/30 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(148,163,184,0.1)] group-hover:bg-slate-500/25 transition-colors">
+                                    <RefreshCcw size={10} strokeWidth={2.5} className="animate-spin-slow" /> Menunggu
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Spacer Pendorong Atas */}
+                    <div className="flex-1" />
+
+                    {/* Garis Separator Tengah */}
+                    <div className="h-px w-full bg-white/5 my-3 xl:my-0" />
+
+                    {/* Spacer Pendorong Bawah */}
+                    <div className="flex-1" />
+
+                    {/* Status Alat Terintegrasi di Bawah */}
+                    <div className={`mt-auto relative z-10`}>
+                        <div className={`flex items-center justify-between p-3 rounded-2xl border ${isMati ? 'bg-red-500/10 border-red-500/30 shadow-[0_0_20px_rgba(239,68,68,0.2)]' : 'bg-emerald-500/5 border-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.1)]'}`}>
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-xl ${isMati ? 'bg-red-500/20 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.3)]' : 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]'}`}>
+                                    {isMati ? <AlertTriangle size={18} className="animate-pulse" /> : <Activity size={18} />}
+                                </div>
+                                <div className="flex flex-col">
+                                    <h2 className="text-[10px] uppercase tracking-widest font-black text-slate-400">Status Alat</h2>
+                                    <p className={`text-sm font-black tracking-widest mt-0.5 ${isMati ? 'text-red-400 drop-shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse' : 'text-emerald-400'}`}>
+                                        {isMati ? 'OFFLINE' : 'ONLINE'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className={`w-2.5 h-2.5 rounded-full ${isMati ? 'bg-red-500 animate-ping' : 'bg-emerald-500 animate-pulse'} shadow-[0_0_10px_currentColor] opacity-80`} />
                         </div>
                     </div>
                 </div>
