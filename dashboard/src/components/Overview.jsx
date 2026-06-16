@@ -3,8 +3,10 @@ import {
     Activity, AlertTriangle, CheckCircle2,
     Thermometer, FlaskConical, Wind, Leaf,
     Waves, DatabaseBackup, Calendar, Timer,
-    Sun, Moon, XCircle, RefreshCcw, Play
+    Sun, Moon, XCircle, RefreshCcw, Play, Video
 } from 'lucide-react';
+
+import CctvKolam from './cctvKolam';
 
 // =================================================================
 // KONFIGURASI TEMA WARNA & ICON TIAP KARTU SENSOR
@@ -59,9 +61,9 @@ const GlassSensorCard = ({ title, valueKey, sensorData, setActiveDetail, classNa
     let isBahaya = false;
     if (val !== undefined) {
         if (valueKey === 'suhu' && (val > 30 || val < 24)) isBahaya = true;
-        if (valueKey === 'ph' && (val < 6.0 || val > 8.0)) isBahaya = true;
-        if (valueKey === 'do' && val < 4.0) isBahaya = true;
-        if (valueKey === 'tds' && (val < 300 || val > 1000)) isBahaya = true;
+        if (valueKey === 'ph' && (val < 5.5 || val > 8.0)) isBahaya = true;
+        if (valueKey === 'do' && val < 3.0) isBahaya = true;
+        if (valueKey === 'tds' && val > 1000) isBahaya = true;
         if (valueKey.startsWith('flow') && val < 5.0) isBahaya = true;
     } else {
         isBahaya = true;
@@ -378,7 +380,7 @@ export default function Overview({
                                     </div>
                                     <div className="flex items-center gap-1.5 justify-between w-full">
                                         <div className="flex gap-1.5 flex-1">
-                                            <input type="time" value={inputPagi} onChange={(e) => setInputPagi(e.target.value)} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[80px] px-2 py-1 focus:outline-none focus:border-indigo-400" />
+                                            <input type="time" value={inputPagi} onChange={(e) => setInputPagi(e.target.value)} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[80px] px-1.5 py-1 focus:outline-none focus:border-indigo-400" />
                                             <input type="number" placeholder={savedGramPagi.toString()} value={inputGramPagi} onChange={(e) => { let val = e.target.value; if (val === '') setInputGramPagi(''); else if (val >= 0 && val <= 140) setInputGramPagi(parseInt(val).toString()); else if (val > 140) setInputGramPagi('140'); }} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[45px] px-1 py-1 text-center focus:outline-none focus:border-indigo-400" />
                                         </div>
                                         <button onClick={() => handleSetPakan('pagi')} className="bg-indigo-600 text-white text-[9px] px-3 py-1 rounded-md hover:bg-indigo-500 font-black tracking-wide ml-1 shrink-0 shadow-sm">SET</button>
@@ -396,14 +398,14 @@ export default function Overview({
                                     </div>
                                     <div className="flex items-center gap-1.5 justify-between w-full">
                                         <div className="flex gap-1.5 flex-1">
-                                            <input type="time" value={inputSore} onChange={(e) => setInputSore(e.target.value)} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[80px] px-2 py-1 focus:outline-none focus:border-indigo-400" />
+                                            <input type="time" value={inputSore} onChange={(e) => setInputSore(e.target.value)} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[80px] px-1.5 py-1 focus:outline-none focus:border-indigo-400" />
                                             <input type="number" placeholder={savedGramSore.toString()} value={inputGramSore} onChange={(e) => { let val = e.target.value; if (val === '') setInputGramSore(''); else if (val >= 0 && val <= 140) setInputGramSore(parseInt(val).toString()); else if (val > 140) setInputGramSore('140'); }} className="bg-white/5 border border-white/10 rounded-md text-white text-[10px] font-bold w-full max-w-[45px] px-1 py-1 text-center focus:outline-none focus:border-indigo-400" />
                                         </div>
                                         <button onClick={() => handleSetPakan('sore')} className="bg-indigo-600 text-white text-[9px] px-3 py-1 rounded-md hover:bg-indigo-500 font-black tracking-wide ml-1 shrink-0 shadow-sm">SET</button>
                                     </div>
                                 </div>
                             </div>
-                            
+
                             {/* BOTTOM SECTION: Matches Row 2 */}
                             <div className="flex flex-col justify-center bg-black/40 px-4 py-2.5 rounded-2xl border border-white/5 shadow-sm mt-auto">
                                 <div className="flex items-center justify-between mb-2">
@@ -548,9 +550,9 @@ export default function Overview({
                     </div>
                 </div>
 
-                    {/* WIDGET KOMBINASI: TRACKING PAKAN, STOK & KONEKSI ALAT */}
-                    <div className="backdrop-blur-xl bg-gradient-to-b from-[#131b2c]/95 to-[#0a0f1a]/95 border border-cyan-500/20 shadow-xl hover:shadow-[0_0_20px_rgba(34,211,238,0.1)] rounded-3xl p-5 xl:h-[380px] shrink-0 flex flex-col relative overflow-hidden transition-all duration-500">
-                        <div className="absolute -right-5 -top-5 w-32 h-32 bg-cyan-500/10 rounded-full blur-[40px] pointer-events-none" />
+                {/* WIDGET KOMBINASI: TRACKING PAKAN, STOK & KONEKSI ALAT */}
+                <div className="backdrop-blur-xl bg-gradient-to-b from-[#131b2c]/95 to-[#0a0f1a]/95 border border-cyan-500/20 shadow-xl hover:shadow-[0_0_20px_rgba(34,211,238,0.1)] rounded-3xl p-5 xl:h-[380px] shrink-0 flex flex-col relative overflow-hidden transition-all duration-500">
+                    <div className="absolute -right-5 -top-5 w-32 h-32 bg-cyan-500/10 rounded-full blur-[40px] pointer-events-none" />
 
                     <div className="flex items-center justify-between mb-1.5 relative z-10 border-b border-white/[0.05] pb-1.5">
                         <div className="flex items-center gap-2 font-bold text-slate-200">
@@ -581,7 +583,7 @@ export default function Overview({
                             </div>
                             {sudahPagi ? (
                                 <span className="flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(16,185,129,0.2)] group-hover:bg-emerald-500/30 transition-colors">
-                                    <CheckCircle2 size={10} strokeWidth={2.5} /> Selesai
+                                    <CheckCircle2 size={10} strokeWidth={2.5} /> Sudah
                                 </span>
                             ) : (
                                 <span className="flex items-center justify-center gap-1.5 bg-red-500/15 text-red-400 border border-red-500/30 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(239,68,68,0.1)] group-hover:bg-red-500/25 transition-colors">
@@ -625,17 +627,26 @@ export default function Overview({
                             </div>
 
                             {sensorData?.pakanKosong === 1 ? (
-                                <span className="flex items-center justify-center gap-1.5 bg-red-500/15 text-red-400 border border-red-500/30 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(239,68,68,0.1)] group-hover:bg-red-500/25 transition-colors">
-                                    <XCircle size={10} strokeWidth={2.5} className="animate-pulse" /> Isi Ulang
-                                </span>
+                                <div className="flex flex-col items-end gap-1">
+                                    <span className="flex items-center justify-center gap-1.5 bg-red-500/15 text-red-400 border border-red-500/30 text-[8px] font-black min-w-[85px] py-1 px-2 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(239,68,68,0.1)] group-hover:bg-red-500/25 transition-colors">
+                                        <XCircle size={10} strokeWidth={2.5} className="animate-pulse" /> Isi Ulang
+                                    </span>
+                                    <span className="text-[6.5px] font-black text-red-400/80 uppercase tracking-widest">Stok &lt; 20%</span>
+                                </div>
                             ) : sensorData?.pakanKosong === 0 ? (
-                                <span className="flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(16,185,129,0.2)] group-hover:bg-emerald-500/30 transition-colors">
-                                    <CheckCircle2 size={10} strokeWidth={2.5} /> Aman
-                                </span>
+                                <div className="flex flex-col items-end gap-1">
+                                    <span className="flex items-center justify-center gap-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-400/40 text-[8px] font-black min-w-[85px] py-1 px-2 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(16,185,129,0.2)] group-hover:bg-emerald-500/30 transition-colors">
+                                        <CheckCircle2 size={10} strokeWidth={2.5} /> Aman
+                                    </span>
+                                    <span className="text-[6.5px] font-black text-emerald-400/80 uppercase tracking-widest">Stok &gt; 20%</span>
+                                </div>
                             ) : (
-                                <span className="flex items-center justify-center gap-1.5 bg-slate-500/15 text-slate-400 border border-slate-500/30 text-[8px] font-black min-w-[85px] py-1 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(148,163,184,0.1)] group-hover:bg-slate-500/25 transition-colors">
-                                    <RefreshCcw size={10} strokeWidth={2.5} className="animate-spin-slow" /> Menunggu
-                                </span>
+                                <div className="flex flex-col items-end gap-1">
+                                    <span className="flex items-center justify-center gap-1.5 bg-slate-500/15 text-slate-400 border border-slate-500/30 text-[8px] font-black min-w-[85px] py-1 px-2 rounded-md tracking-widest uppercase shadow-[0_0_10px_rgba(148,163,184,0.1)] group-hover:bg-slate-500/25 transition-colors">
+                                        <RefreshCcw size={10} strokeWidth={2.5} className="animate-spin-slow" /> Menunggu
+                                    </span>
+                                    <span className="text-[6.5px] font-black text-slate-500/80 uppercase tracking-widest">IR Sensor</span>
+                                </div>
                             )}
                         </div>
                     </div>
