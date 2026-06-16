@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Power, CirclePlus, ChevronDown, Check } from 'lucide-react';
+import { Power, CirclePlus, ChevronDown, Check, Video } from 'lucide-react';
 
 export default function Header({
     devices,
@@ -8,6 +8,7 @@ export default function Header({
     sensorData,
     activeAlarms,
     onOpenAddModal,
+    onOpenCctvModal,
     allStatuses,
     userName
 }) {
@@ -41,7 +42,10 @@ export default function Header({
     const getStatusColor = (deviceId) => {
         const data = allStatuses?.[deviceId];
 
-        if (!data || Object.keys(data).length === 0 || (data.suhu === 0 && data.flow1 === 0)) {
+        // Cek apakah device mati (tidak ada update lebih dari 5 menit)
+        const isDeviceMati = !data || !data.lastUpdated || (Date.now() - data.lastUpdated > 300000);
+
+        if (isDeviceMati || Object.keys(data).length === 0 || (data.suhu === 0 && data.flow1 === 0)) {
             return 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]';
         }
 
@@ -129,13 +133,25 @@ export default function Header({
                     )}
                 </div>
 
-                <button
-                    onClick={onOpenAddModal}
-                    className="flex items-center gap-2 bg-[#131b2c] border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-400 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ml-auto xl:ml-0"
-                >
-                    <CirclePlus size={16} />
-                    <span>Tambah</span>
-                </button>
+                <div className="flex items-center gap-2 ml-auto xl:ml-0">
+                    <button
+                        onClick={onOpenCctvModal}
+                        className="flex items-center justify-center gap-2 bg-blue-500/10 border border-blue-500/30 hover:bg-blue-500/20 text-blue-400 p-2.5 sm:px-4 sm:py-2.5 rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(59,130,246,0.15)]"
+                        title="Live CCTV"
+                    >
+                        <Video size={16} className="animate-pulse" />
+                        <span className="hidden sm:inline uppercase tracking-wider">CCTV</span>
+                    </button>
+
+                    <button
+                        onClick={onOpenAddModal}
+                        className="flex items-center justify-center gap-2 bg-[#131b2c] border border-white/10 hover:border-cyan-500/40 text-slate-300 hover:text-cyan-400 p-2.5 sm:px-4 sm:py-2.5 rounded-xl text-xs font-bold transition-all"
+                        title="Tambah Perangkat"
+                    >
+                        <CirclePlus size={16} />
+                        <span className="hidden sm:inline">Tambah</span>
+                    </button>
+                </div>
 
             </div>
         </header>
