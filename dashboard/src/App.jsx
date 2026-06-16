@@ -7,6 +7,8 @@ import DetailView from './components/DetailView';
 import AddDeviceModal from './components/AddDeviceModal';
 import Login from './components/Login';
 import EmptyState from './components/EmptyState';
+import CctvKolam from './components/cctvKolam';
+import { X } from 'lucide-react';
 
 export default function App() {
   const [devices, setDevices] = useState([]);
@@ -21,6 +23,7 @@ export default function App() {
   const [tableData, setTableData] = useState([]);
   const [allStatuses, setAllStatuses] = useState({});
   const [filterDate, setFilterDate] = useState(''); // <-- STATE FILTER TANGGAL UDAH ADA
+  const [showCctvModal, setShowCctvModal] = useState(false);
 
   /// FUNGSI LOGOUT (KURAS MEMORI TOTAL)
   const handleLogout = () => {
@@ -69,7 +72,15 @@ export default function App() {
     const fetchData = () => {
       fetch(`https://api.aquasafe.my.id/api/sensor/${selectedDevice}`)
         .then(res => res.json())
-        .then(data => { if (data.suhu !== undefined) setSensorData(data); })
+        .then(data => { 
+          if (data.suhu !== undefined) {
+             if (data.ph !== undefined) {
+                 if (data.ph < 4.0) data.ph = 4.0;
+                 else if (data.ph > 9.0) data.ph = 9.0;
+             }
+             setSensorData(data); 
+          }
+        })
         .catch(err => console.error("Gagal memuat sensor:", err));
 
       // === UBAH JALUR FETCH HISTORY AGAR NGIRIM PARAMETER TANGGAL KE BACKEND ===
@@ -87,13 +98,17 @@ export default function App() {
               const dateStr = isLive ? "" : dateObj.toLocaleDateString('sv-SE'); // Format YYYY-MM-DD
               const fullTimeStr = isLive ? "Live" : `${dateStr} ${timeStr}`; // Gabungan buat DetailView
 
+              let phClamped = row.ph || 0;
+              if (phClamped < 4.0) phClamped = 4.0;
+              else if (phClamped > 9.0) phClamped = 9.0;
+
               return {
                 id: row.id,
                 time: timeStr,
                 date: dateStr, // Disimpen buat filter kalender
                 fullTime: fullTimeStr, // Disimpen buat grafik detail
                 temp: row.suhu?.toFixed(1) || "0.0",
-                ph: row.ph?.toFixed(2) || "0.00",
+                ph: phClamped.toFixed(2),
                 flow: row.flow1?.toFixed(1) || "0.0",
                 doVal: row.do_level || 0,
                 tdsVal: row.tds || 0,
@@ -143,7 +158,7 @@ export default function App() {
   } else {
     // Jika perangkat beneran terkoneksi dan ngalir data, baru satpamnya menyisir parameter!
     if (sensorData?.pakanKosong === 1) {
-      activeAlarms.push({ time: 'SEKARANG', msg: '🚨 Stok Pakan Kosong! Segera Isi Ulang.', type: 'critical' });
+      activeAlarms.push({ time: 'SEKARANG', msg: '🚨 Segera Isi Ulang Stok Pakan!', type: 'critical' });
     }
     if (sensorData?.power === false) {
       activeAlarms.push({ time: 'SEKARANG', msg: 'PLN Terputus! Pakai Baterai.', type: 'critical' });
@@ -227,11 +242,11 @@ export default function App() {
   });
 
   if (!userId) {
-    return <Login onLogin={(id, nama) => { 
-        setUserId(id); 
-        setUserName(nama || 'Admin');
-        localStorage.setItem('userId', id);
-        if (nama) localStorage.setItem('userName', nama);
+    return <Login onLogin={(id, nama) => {
+      setUserId(id);
+      setUserName(nama || 'Admin');
+      localStorage.setItem('userId', id);
+      if (nama) localStorage.setItem('userName', nama);
     }} />;
   }
 
@@ -248,7 +263,17 @@ export default function App() {
         </span>
       </button>
 
-      <Header devices={sortedDevices} selectedDevice={selectedDevice} setSelectedDevice={setSelectedDevice} sensorData={sensorData} activeAlarms={activeAlarms} onOpenAddModal={() => setIsAddModalOpen(true)} allStatuses={allStatuses} userName={userName} />
+      <Header 
+        devices={sortedDevices} 
+        selectedDevice={selectedDevice} 
+        setSelectedDevice={setSelectedDevice} 
+        sensorData={sensorData} 
+        activeAlarms={activeAlarms} 
+        onOpenAddModal={() => setIsAddModalOpen(true)} 
+        onOpenCctvModal={() => setShowCctvModal(true)}
+        allStatuses={allStatuses} 
+        userName={userName} 
+      />
 
       <AddDeviceModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAdd={handleAddNewDevice} />
 
@@ -295,6 +320,24 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* 🔥 MODAL CCTV (LIFTED TO APP.JSX) */}
+      {showCctvModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1a]/80 backdrop-blur-md px-4 animate-in fade-in duration-300">
+              <div className="w-full max-w-3xl relative">
+                  {/* Tombol Close */}
+                  <button 
+                      onClick={() => setShowCctvModal(false)}
+                      className="absolute -top-12 right-0 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-full p-2 transition-all hover:rotate-90 z-10 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                  >
+                      <X size={20} />
+                  </button>
+                  
+                  {/* Komponen CCTV */}
+                  <CctvKolam />
+              </div>
+          </div>
+      )}
     </div>
   );
 }
