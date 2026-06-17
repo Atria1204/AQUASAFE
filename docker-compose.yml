@@ -15,10 +15,10 @@ services:
     image: mysql:8.0
     container_name: aquasafe_db
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: aquasafe_iot
-      MYSQL_USER: admin
-      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAMA}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_USER_PASS}
       TZ: Asia/Jakarta
     ports:
       - "3306:3306"
@@ -37,7 +37,6 @@ services:
       - "8080:80"
     depends_on:
       - db
-
   # 2. Dapur Kita (Node.js Backend)
   # (Sementara kita matikan dulu bagian backend docker ini sampai Mosquitto jalan lancar)
   # backend:

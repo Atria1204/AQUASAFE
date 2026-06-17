@@ -6,8 +6,12 @@ backend/node_modules/
 # Mengabaikan file hasil build
 dashboard/dist/
 
+# Mengabaikan skrip testing yang mungkin berisi IP rahasia
+backend/scripts/
+
 # Mengabaikan database lokal
 mysql_data/
+*.sql
 
 # Mengabaikan file rahasia (password database)
 backend/.env
