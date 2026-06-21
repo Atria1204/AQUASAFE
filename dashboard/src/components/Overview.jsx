@@ -144,10 +144,16 @@ export default function Overview({
     // 🔥 KODE BARU: State untuk waktu saat ini
     const [currentTime, setCurrentTime] = useState(new Date());
 
+    // 🔥 KODE BARU: State dan Otak Paginasi Riwayat
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 5; // Jumlah baris maksimal per halaman agar tabel tidak meluber
+    // Kembalikan ke halaman 1 setiap kali user melakukan pencarian / filter kalender
     useEffect(() => {
-        const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-        return () => clearInterval(timer);
-    }, []);
+        setCurrentPage(1);
+    }, [searchQuery, filterDate]);
+    // Potong data berdasarkan halaman yang aktif
+    const totalPages = Math.ceil(filteredTableData.length / itemsPerPage);
+    const paginatedData = filteredTableData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     // =================================================================
     // LOGIKA POLLING: MENGAMBIL DATA DARI SERVER TIAP 2 DETIK
@@ -418,7 +424,7 @@ export default function Overview({
                                         <span className="text-[9px] font-bold text-slate-400">g</span>
                                     </div>
                                 </div>
-                                <button onClick={handleToggleClick} className={`w-full flex items-center justify-center gap-2 text-white text-[9px] font-black tracking-widest uppercase rounded-xl border py-2 px-4 ${isManualFeedOn ? "bg-red-600 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse" : "bg-emerald-600 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:-translate-y-1 transition-transform duration-300"}`}>
+                                <button onClick={handleToggleClick} className={`w-full flex items-center justify-center gap-2 text-white text-[9px] font-black tracking-widest uppercase rounded-xl border py-2 px-4 ${isManualFeedOn ? "bg-red-600 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse" : "bg-emerald-600 border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:bg-emerald-500 transition-transform duration-300"}`}>
                                     <Timer size={13} className={isManualFeedOn ? "animate-spin" : ""} />
                                     <span>{isManualFeedOn ? "STOP PEMBERIAN" : "BERI PAKAN SEKARANG"}</span>
                                 </button>
@@ -452,7 +458,8 @@ export default function Overview({
                                     type="date"
                                     value={filterDate}
                                     onChange={(e) => setFilterDate(e.target.value)}
-                                    className="bg-[#0a0f1a] border border-white/10 rounded-full pl-11 pr-4 py-2.5 text-xs font-medium focus:outline-none focus:border-cyan-500/50 text-slate-200 w-full sm:w-40 transition-colors shadow-inner [color-scheme:dark]"
+                                    onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                                    className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl pl-11 pr-4 py-2.5 text-[10px] font-black tracking-widest uppercase text-slate-200 w-full sm:w-40 transition-all shadow-inner backdrop-blur-md cursor-pointer focus:outline-none focus:border-cyan-500/50 [color-scheme:dark]"
                                 />
                                 {filterDate && (
                                     <button onClick={() => setFilterDate('')} className="absolute right-9 text-[10px] text-red-400 hover:text-red-300 font-bold z-20">X</button>
@@ -461,9 +468,9 @@ export default function Overview({
                         </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto pr-3 custom-scrollbar scroll-smooth relative z-10">
-                        <table className="w-full text-left text-sm text-slate-200 border-collapse">
-                            <thead className="sticky top-0 bg-[#0f172a]/95 backdrop-blur-xl z-20 before:content-[''] before:absolute before:inset-x-0 before:bottom-0 before:border-b before:border-white/[0.05]">
+                    <div className="flex-1 overflow-y-auto overflow-x-auto pr-3 custom-scrollbar scroll-smooth relative z-10">
+                        <table className="w-full min-w-[600px] text-left text-sm text-slate-200 border-collapse">
+                            <thead className="sticky top-0 bg-[#0f172a]/95 backdrop-blur-xl z-20 before:content-[''] before:absolute before:inset-x-0 before:bottom-0 before:border-b before:border-white/[0.05] whitespace-nowrap">
                                 <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                                     <th className="pb-4 pt-4 pl-4 w-[24%] rounded-tl-xl">Tanggal & Waktu</th>
                                     <th className="pb-4 pt-4 w-[19%] text-blue-300">Suhu Air</th>
@@ -484,24 +491,24 @@ export default function Overview({
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredTableData.map((row) => (
+                                    paginatedData.map((row) => (
                                         <tr key={row.id} className="border-b border-white/[0.04] hover:bg-white/[0.05] transition-colors group">
-                                            <td className="py-3 pl-4">
+                                            <td className="py-3 pl-4 whitespace-nowrap">
                                                 <div className="flex flex-col">
                                                     <span className="text-xs font-bold text-slate-200 group-hover:text-white transition-colors">{row.date ? row.date : 'Hari Ini'}</span>
                                                     <span className="font-mono text-[10px] text-slate-400">{row.time}</span>
                                                 </div>
                                             </td>
-                                            <td className="py-3 font-bold text-white text-sm">
+                                            <td className="py-3 font-bold text-white text-sm whitespace-nowrap">
                                                 {row.temp} <span className="text-[10px] text-slate-500 font-normal ml-0.5">°C</span>
                                             </td>
-                                            <td className="py-3 font-bold text-white text-sm">
+                                            <td className="py-3 font-bold text-white text-sm whitespace-nowrap">
                                                 {row.ph}
                                             </td>
-                                            <td className="py-3 font-bold text-white text-sm">
+                                            <td className="py-3 font-bold text-white text-sm whitespace-nowrap">
                                                 {row.doVal} <span className="text-[10px] text-slate-500 font-normal ml-0.5">mg/L</span>
                                             </td>
-                                            <td className="py-3 font-bold text-white text-sm">
+                                            <td className="py-3 font-bold text-white text-sm whitespace-nowrap">
                                                 {row.tdsVal} <span className="text-[10px] text-lime-600 font-normal ml-0.5">PPM</span>
                                             </td>
                                         </tr>
@@ -510,12 +517,34 @@ export default function Overview({
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Pagination Controls */}
+                    <div className="mt-4 pt-4 border-t border-white/[0.05] flex justify-between items-center">
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            disabled={currentPage === 1}
+                            className="px-4 py-1.5 bg-white/[0.03] hover:bg-white/[0.08] text-slate-200 hover:text-white rounded-full text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            Previous
+                        </button>
+                        <span className="text-xs font-mono text-slate-400">
+                            {currentPage} of {totalPages}
+                        </span>
+                        <button
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            disabled={currentPage === totalPages}
+                            className="px-4 py-1.5 bg-white/[0.03] hover:bg-white/[0.08] text-slate-200 hover:text-white rounded-full text-xs font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            Next
+                        </button>
+                    </div>
+
                 </div>
             </div>
 
             {/* SIDEBAR LOG ALARM DAN INFORMASI STATUS TELEMETRI KANAN */}
             <div className="flex flex-col gap-6 h-full">
-                <div className="backdrop-blur-xl bg-[#131b2c]/95 border border-white/10 rounded-[2rem] p-6 flex flex-col relative overflow-hidden xl:h-[308px] shrink-0 shadow-xl">
+                <div className="backdrop-blur-xl bg-[#131b2c]/95 border border-white/10 rounded-[2rem] p-6 flex flex-col relative overflow-hidden h-[300px] xl:h-[308px] shrink-0 shadow-xl">
                     <AlertTriangle className={`absolute -right-8 -bottom-8 w-40 h-40 opacity-[0.03] pointer-events-none ${activeAlarms.length > 0 ? 'text-red-400 animate-pulse opacity-[0.09]' : 'text-slate-500'}`} />
 
                     <div className="flex items-center justify-between mb-4 border-b border-white/[0.05] pb-4 relative z-10">
@@ -713,7 +742,8 @@ export default function Overview({
                         <div className="flex gap-3 mt-5 relative z-10">
                             <button
                                 onClick={() => setShowManualConfirm(false)}
-                                className="flex-1 px-4 py-3 bg-black/40 hover:bg-black/60 text-slate-300 font-black text-[10px] tracking-widest uppercase rounded-xl transition-colors border border-white/5"
+                                className="flex-1 px-4 py-3 bg-black/40 hover:bg-red-500/10 hover:text-red-500 hover:border-red-700/20 text-slate-300 font-black text-[10px] tracking-widest uppercase rounded-xl transition-all border border-white/5"
+
                             >
                                 Batal
                             </button>
