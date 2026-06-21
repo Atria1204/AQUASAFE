@@ -19,3 +19,6 @@ backend/.env
 
 # Mengabaikan folder NUC yang gak kepake di cloud
 NUC/
+
+# Mengabaikan .agent/
+.agent/

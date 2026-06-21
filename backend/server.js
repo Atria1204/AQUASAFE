@@ -218,6 +218,12 @@ mqttClient.on('connect', () => {
     });
 });
 
+// JALUR MQTT PUBLIK (KHUSUS UNTUK KONTROL KAMERA LINTAS JARINGAN)
+const publicMqttClient = mqtt.connect('mqtt://broker.hivemq.com:1883');
+publicMqttClient.on('connect', () => {
+    console.log('✅ Terhubung ke MQTT Broker Publik (HiveMQ) untuk Kamera!');
+});
+
 mqttClient.on('message', (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
@@ -510,16 +516,30 @@ setInterval(runBackgroundJob, 60000); // 60000 ms = 1 menit
 setTimeout(runBackgroundJob, 2000); // Eksekusi awal 2 detik setelah server hidup
 
 // =================================================================
-// 7. SISTEM CCTV (WEBSOCKETS VIDEO STREAMING REAL-TIME)
+// 7. SISTEM CCTV (WEBSOCKETS KONTROL ON/OFF & SINKRONISASI GLOBAL)
 // =================================================================
-/*const viewers = new Set();
+const viewers = new Set();
+let esp32Socket = null;
+let isCameraStreaming = false; // Tambahan: Menyimpan status global kamera
+
+function broadcastEspStatus() {
+    const statusMsg = JSON.stringify({
+        type: "ESP_STATUS",
+        isReady: esp32Socket !== null,
+        isStreaming: isCameraStreaming // Tambahan: Menyiarkan status ON/OFF ke semua React
+    });
+    for (let viewer of viewers) {
+        if (viewer.readyState === WebSocket.OPEN) {
+            viewer.send(statusMsg);
+        }
+    }
+}
 
 wss.on('connection', (ws, req) => {
-    // Pintu masuk untuk ESP32-CAM
     if (req.url === '/api/stream/input') {
-        console.log('🔗 [WebSockets] ESP32-CAM Terhubung! (Kamera Mengirim Video)');
+        esp32Socket = ws;
+        broadcastEspStatus();
 
-        // Terima foto dari ESP32, langsung lempar ke semua layar React (Broadcast)
         ws.on('message', (message) => {
             for (let viewer of viewers) {
                 if (viewer.readyState === WebSocket.OPEN) {
@@ -528,26 +548,74 @@ wss.on('connection', (ws, req) => {
             }
         });
 
-        ws.on('close', () => console.log('❌ [WebSockets] ESP32-CAM Terputus!'));
-    }
-    // Pintu keluar untuk layar Web React
-    else if (req.url === '/api/stream/output') {
-        console.log('💻 [WebSockets] Layar React Web Terhubung! (Menonton Video)');
-        viewers.add(ws);
-
         ws.on('close', () => {
-            console.log('❌ [WebSockets] Layar React Web Terputus!');
-            viewers.delete(ws);
+            esp32Socket = null;
+            isCameraStreaming = false; // Reset status saat alat mati
+            broadcastEspStatus();
         });
     }
-    // Kalau ada yang nyoba nembak URL asal-asalan, tolak
-    else {
+    else if (req.url === '/api/stream/output') {
+        viewers.add(ws);
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: "ESP_STATUS",
+                isReady: esp32Socket !== null,
+                isStreaming: isCameraStreaming // Beritahu laptop yang baru buka web
+            }));
+        }
+
+        ws.on('close', () => viewers.delete(ws));
+    } else {
         ws.close();
     }
 });
 
-*/
-// PERHATIKAN: Sekarang kita pakai 'server.listen', BUKAN 'app.listen'
+// app.post('/api/kamera/toggle', (req, res) => {
+//     const { action } = req.body;
+//     // [LOG 3] Cek apakah API /toggle dipanggil oleh React
+//     console.log(`\n=========================================`);
+//     console.log(`[BACKEND] Menerima perintah dari web: ${action}`);
+
+//     if (esp32Socket && esp32Socket.readyState === WebSocket.OPEN) {
+//         isCameraStreaming = (action === "ON"); // Perbarui memori global
+//         esp32Socket.send(action === "ON" ? "CMD:START" : "CMD:STOP");
+//         // [LOG 4] Bukti bahwa server menembakkan teks ke ESP32
+//         console.log(`[BACKEND] Meneruskan teks ke ESP32: "${action}"`);
+
+//         broadcastEspStatus(); // Paksa semua laptop menyamakan tampilan tombol
+
+//         res.json({ success: true, message: `Kamera ${action}` });
+//     } else {
+//         console.log(`[BACKEND] GAGAL! ESP32 belum masuk ke pipa server.`);
+//         res.status(400).json({ success: false, message: "Kamera offline/belum terhubung" });
+//     }
+// });
+
+app.post('/api/kamera/toggle', (req, res) => {
+    const { action } = req.body; // action bernilai "ON" atau "OFF"
+
+    console.log(`\n=========================================`);
+    console.log(`[BACKEND] Menerima perintah dari web: ${action}`);
+
+    // LANGSUNG TEMBAK ke MQTT Publik (HiveMQ) tanpa peduli status WebSockets
+    const topic = 'aquasafe/kamera/kolam1/kontrol';
+
+    publicMqttClient.publish(topic, action, (err) => {
+        if (err) {
+            console.error('❌ Gagal mengirim perintah MQTT ke ESP32:', err);
+            return res.status(500).json({ success: false, message: 'Gagal mengirim instruksi ke kolam' });
+        }
+
+        console.log(`📡 [MQTT Publik] Perintah '${action}' berhasil disiarkan ke topik ${topic}`);
+
+        // Perbarui memori global dan paksa semua layar web mengaktifkan state kamera
+        isCameraStreaming = (action === "ON");
+        broadcastEspStatus();
+
+        res.json({ success: true, message: `Instruksi ${action} terkirim!` });
+    });
+});
+
 server.listen(PORT, () => {
     console.log(`🚀 Server Backend Multi-Device berjalan pada port ${PORT} (Dengan WebSockets)`);
 });
