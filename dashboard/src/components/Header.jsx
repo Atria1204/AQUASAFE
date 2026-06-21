@@ -65,15 +65,18 @@ export default function Header({
     };
 
     return (
-        <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 gap-5 border-b border-white/[0.05] pb-6">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-5 border-b border-white/[0.05] pb-3">
 
-            <div className="flex-shrink-0">
-                <h1 className="text-3xl font-black bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent tracking-tight">
-                    AQUASAFE
-                </h1>
-                <p className="text-slate-400 text-xs font-bold mt-1 tracking-[0.2em] uppercase">
-                    DASHBOARD &nbsp;&bull;&nbsp; HAI, {userName}
-                </p>
+            <div className="flex flex-shrink-0 items-center gap-4">
+                <img src="/logo1.png" alt="AquaSafe Logo" className="w-12 h-12 md:w-16 md:h-16 drop-shadow-[0_0_15px_rgba(34,211,238,0.6)] hover:scale-110 transition-transform duration-300" />
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-black bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent tracking-tight">
+                        AQUASAFE
+                    </h1>
+                    <p className="text-slate-400 text-[10px] md:text-xs font-bold mt-1 tracking-[0.2em] uppercase">
+                        DASHBOARD &nbsp;&bull;&nbsp; Selamat Datang, {userName}!
+                    </p>
+                </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto relative z-40">
@@ -94,7 +97,7 @@ export default function Header({
                     </button>
 
                     <div
-                        className={`absolute top-full left-0 right-0 mt-2 bg-[#0f172a]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden transition-all duration-200 origin-top ${isDropdownOpen ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0 pointer-events-none'}`}
+                        className={`absolute z-50 top-full left-0 right-0 mt-2 bg-[#0f172a]/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden transition-all duration-200 origin-top ${isDropdownOpen ? 'opacity-100 scale-y-100' : 'opacity-0 scale-y-0 pointer-events-none'}`}
                     >
                         {devices?.map(d => (
                             <button
