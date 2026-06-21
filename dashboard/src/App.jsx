@@ -28,7 +28,7 @@ export default function App() {
   /// FUNGSI LOGOUT (KURAS MEMORI TOTAL)
   const handleLogout = () => {
     localStorage.removeItem('userId');
-    localStorage.removeItem('lastViewedDevice');
+    //localStorage.removeItem('lastViewedDevice');
     localStorage.removeItem('userName');
     setUserId(null);
     setUserName('');
@@ -72,13 +72,13 @@ export default function App() {
     const fetchData = () => {
       fetch(`https://api.aquasafe.my.id/api/sensor/${selectedDevice}`)
         .then(res => res.json())
-        .then(data => { 
+        .then(data => {
           if (data.suhu !== undefined) {
-             if (data.ph !== undefined) {
-                 if (data.ph < 4.0) data.ph = 4.0;
-                 else if (data.ph > 9.0) data.ph = 9.0;
-             }
-             setSensorData(data); 
+            if (data.ph !== undefined) {
+              if (data.ph < 4.0) data.ph = 4.0;
+              else if (data.ph > 9.0) data.ph = 9.0;
+            }
+            setSensorData(data);
           }
         })
         .catch(err => console.error("Gagal memuat sensor:", err));
@@ -223,23 +223,31 @@ export default function App() {
   };
 
   const sortedDevices = [...devices].sort((a, b) => {
-    const getSeverity = (stat) => {
-      if (!stat || Object.keys(stat).length === 0) return 0;
+    const getRank = (stat) => {
+      // Peringkat 3 = Kuning (Bahaya), Peringkat 2 = Hijau (Normal), Peringkat 1 = Merah (Mati/Kosong)
+      if (!stat || Object.keys(stat).length === 0) return 1; // Merah
+
+      const isDeviceMati = !stat.lastUpdated || (Date.now() - stat.lastUpdated > 300000);
+      if (isDeviceMati) return 1; // Merah
+
+      // Cek apakah ada satupun sensor yang menyentuh batas bahaya
       const isSuhuBahaya = stat.suhu > 30 || (stat.suhu < 24 && stat.suhu !== 0);
       const isPhBahaya = (stat.ph < 5.0 && stat.ph !== 0) || stat.ph > 8.0;
       const isDoBahaya = stat.do < 3.0 && stat.do !== 0;
       const isTdsBahaya = (stat.tds < 300 && stat.tds !== 0) || stat.tds > 1000;
       const isFlow1Bahaya = stat.flow1 < 5.0 && stat.flow1 !== 0;
       const isFlow2Bahaya = stat.flow2 < 5.0 && stat.flow2 !== 0;
-      const isPowerMati = stat.power === false;
-      const isDeviceMati = !stat.lastUpdated || (Date.now() - stat.lastUpdated > 300000);
-      const isPakanKosong = stat.pakanKosong === 1;
 
-      if (isSuhuBahaya || isPhBahaya || isDoBahaya || isTdsBahaya || isFlow1Bahaya || isFlow2Bahaya || isPowerMati || isDeviceMati || isPakanKosong) return 2;
-      return 1;
+      if (isSuhuBahaya || isPhBahaya || isDoBahaya || isTdsBahaya || isFlow1Bahaya || isFlow2Bahaya) {
+        return 3; // Kuning (Prioritas Tertinggi)
+      }
+
+      return 2; // Hijau (Aman/Normal)
     };
-    return getSeverity(allStatuses[b.device_id] || {}) - getSeverity(allStatuses[a.device_id] || {});
+
+    return getRank(allStatuses[b.device_id]) - getRank(allStatuses[a.device_id]);
   });
+
 
   if (!userId) {
     return <Login onLogin={(id, nama) => {
@@ -251,93 +259,102 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0f1a] text-slate-100 p-4 md:p-8 font-sans pb-24 selection:bg-blue-500/30 overflow-x-hidden relative">
+    <div className="min-h-screen bg-[url('/background1.jpg')] bg-cover bg-fixed bg-center text-slate-100 font-sans overflow-x-hidden relative">
 
-      <button
-        onClick={handleLogout}
-        className="fixed bottom-6 right-6 z-50 flex items-center justify-center gap-2 bg-red-600/20 border border-red-500/30 text-red-400 p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.15)] hover:bg-red-600 hover:text-white hover:shadow-[0_0_25px_rgba(220,38,38,0.5)] hover:scale-105 backdrop-blur-md transition-all duration-300 group"
-      >
-        <LogOut className="w-5 h-5" />
-        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 ease-in-out whitespace-nowrap font-semibold">
-          <span className="pl-1 pr-2">Keluar</span>
-        </span>
-      </button>
+      {/* Overlay Gelap Kaca */}
+      <div className="absolute inset-0 bg-[#030712]/90 backdrop-blur-md z-0 pointer-events-none fixed"></div>
 
-      <Header 
-        devices={sortedDevices} 
-        selectedDevice={selectedDevice} 
-        setSelectedDevice={setSelectedDevice} 
-        sensorData={sensorData} 
-        activeAlarms={activeAlarms} 
-        onOpenAddModal={() => setIsAddModalOpen(true)} 
-        onOpenCctvModal={() => setShowCctvModal(true)}
-        allStatuses={allStatuses} 
-        userName={userName} 
-      />
+      {/* Konten Utama Dasbor dibungkus relative z-10 */}
+      <div className="relative z-10 p-4 md:p-8">
+        <button
+          onClick={handleLogout}
+          className="fixed bottom-6 right-6 z-50 flex items-center justify-center gap-2 bg-red-600/20 border border-red-500/30 text-red-400 p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.15)] hover:bg-red-600 hover:text-white hover:shadow-[0_0_25px_rgba(220,38,38,0.5)] hover:scale-105 backdrop-blur-md transition-all duration-300 group"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 ease-in-out whitespace-nowrap font-semibold">
+            <span className="pl-1 pr-2">Keluar</span>
+          </span>
+        </button>
 
-      <AddDeviceModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAdd={handleAddNewDevice} />
+        <Header
+          devices={sortedDevices}
+          selectedDevice={selectedDevice}
+          setSelectedDevice={setSelectedDevice}
+          sensorData={sensorData}
+          activeAlarms={activeAlarms}
+          onOpenAddModal={() => setIsAddModalOpen(true)}
+          onOpenCctvModal={() => setShowCctvModal(true)}
+          allStatuses={allStatuses}
+          userName={userName}
+        />
 
-      <main className="max-w-[1800px] mx-auto">
-        {isLoading ? (
-          <div className="min-h-[70vh] flex items-center justify-center text-slate-500">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
-          </div>
-        ) : devices.length === 0 ? (
-          <EmptyState onOpenAddModal={() => setIsAddModalOpen(true)} />
-        ) : activeDetail === null ? (
-          <Overview
-            getDetailConfig={getDetailConfig}
-            setActiveDetail={setActiveDetail}
-            filteredTableData={filteredTableData}
-            searchQuery={searchQuery}
-            setSearchQuery={setSearchQuery}
-            activeAlarms={activeAlarms}
-            selectedDevice={selectedDevice}
-            sensorData={sensorData}
-            // === PERUBAHAN 4: NGIRIM PROPS KALENDER KE OVERVIEW ===
-            filterDate={filterDate}
-            setFilterDate={setFilterDate}
-          />
-        ) : (
-          <DetailView
-            activeDetail={activeDetail}
-            setActiveDetail={setActiveDetail}
-            detailData={getDetailConfig(activeDetail)}
-            sensorData={sensorData} // 🔥 KIRIM DATA SENSOR (YANG ADA RATA-RATANYA)
-            // === OTAK PEMILIH DATA GRAFIK (DINAMIS) ===
-            chartData={tableData.slice(0, 15).reverse().map(d => {
-              let chartVal = 0;
-              if (activeDetail === 'Suhu Air') chartVal = parseFloat(d.temp);
-              else if (activeDetail === 'pH Level') chartVal = parseFloat(d.ph);
-              else if (activeDetail === 'O2 Terlarut') chartVal = parseFloat(d.doVal);
-              else if (activeDetail === 'TDS Nutrisi') chartVal = parseFloat(d.tdsVal);
-              else if (activeDetail === 'Flow 1') chartVal = parseFloat(d.flow);
-              else if (activeDetail === 'Flow 2') chartVal = parseFloat(d.f2);
+        <AddDeviceModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAdd={handleAddNewDevice} />
 
-              return { time: d.fullTime, val: chartVal };
-            })}
-            selectedDevice={selectedDevice}
-          />
-        )}
-      </main>
 
-      {/* 🔥 MODAL CCTV (LIFTED TO APP.JSX) */}
-      {showCctvModal && (
+
+        <main className="max-w-[1800px] mx-auto">
+          {isLoading ? (
+            <div className="min-h-[70vh] flex items-center justify-center text-slate-500">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+            </div>
+          ) : devices.length === 0 ? (
+            <EmptyState onOpenAddModal={() => setIsAddModalOpen(true)} />
+          ) : activeDetail === null ? (
+            <Overview
+              getDetailConfig={getDetailConfig}
+              setActiveDetail={setActiveDetail}
+              filteredTableData={filteredTableData}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              activeAlarms={activeAlarms}
+              selectedDevice={selectedDevice}
+              sensorData={sensorData}
+              // === PERUBAHAN 4: NGIRIM PROPS KALENDER KE OVERVIEW ===
+              filterDate={filterDate}
+              setFilterDate={setFilterDate}
+            />
+          ) : (
+            <DetailView
+              activeDetail={activeDetail}
+              setActiveDetail={setActiveDetail}
+              detailData={getDetailConfig(activeDetail)}
+              sensorData={sensorData} // 🔥 KIRIM DATA SENSOR (YANG ADA RATA-RATANYA)
+              // === OTAK PEMILIH DATA GRAFIK (DINAMIS) ===
+              chartData={tableData.slice(0, 15).reverse().map(d => {
+                let chartVal = 0;
+                if (activeDetail === 'Suhu Air') chartVal = parseFloat(d.temp);
+                else if (activeDetail === 'pH Level') chartVal = parseFloat(d.ph);
+                else if (activeDetail === 'O2 Terlarut') chartVal = parseFloat(d.doVal);
+                else if (activeDetail === 'TDS Nutrisi') chartVal = parseFloat(d.tdsVal);
+                else if (activeDetail === 'Flow 1') chartVal = parseFloat(d.flow);
+                else if (activeDetail === 'Flow 2') chartVal = parseFloat(d.f2);
+
+                return { time: d.fullTime, val: chartVal };
+              })}
+              selectedDevice={selectedDevice}
+            />
+          )}
+        </main>
+
+        {/* 🔥 MODAL CCTV (LIFTED TO APP.JSX) */}
+        {showCctvModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1a]/80 backdrop-blur-md px-4 animate-in fade-in duration-300">
-              <div className="w-full max-w-3xl relative">
-                  {/* Tombol Close */}
-                  <button 
-                      onClick={() => setShowCctvModal(false)}
-                      className="absolute -top-12 right-0 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-full p-2 transition-all hover:rotate-90 z-10 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
-                  >
-                      <X size={20} />
-                  </button>
-                  
-                  {/* Komponen CCTV */}
-                  <CctvKolam />
-              </div>
+            <div className="w-full max-w-3xl relative">
+              {/* Tombol Close */}
+              <button
+                onClick={() => setShowCctvModal(false)}
+                className="absolute -top-12 right-0 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-full p-2 transition-all hover:rotate-90 z-10 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+              >
+                <X size={20} />
+              </button>
+
+              {/* Komponen CCTV */}
+              <CctvKolam />
+            </div>
           </div>
-      )}
+        )}
+      </div>
+
     </div>
   );
 }
