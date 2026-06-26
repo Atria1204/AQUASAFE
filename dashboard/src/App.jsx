@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Droplets, Thermometer, Wind, Activity, Waves, RefreshCcw, FlaskConical, Leaf, Filter, LogOut } from 'lucide-react';
+import { Thermometer, Wind, Activity, Waves, FlaskConical, Leaf, LogOut } from 'lucide-react';
+import { API_BASE_URL } from './config';
 
 import Header from './components/Header';
 import Overview from './components/Overview';
@@ -9,6 +10,61 @@ import Login from './components/Login';
 import EmptyState from './components/EmptyState';
 import CctvKolam from './components/cctvKolam';
 import { X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+
+// Fungsi untuk merangkum data per jam (Hourly Aggregation)
+const getHourlyData = (tableData, activeDetail) => {
+  const groups = {};
+
+  tableData.forEach(row => {
+    // Abaikan baris jika data tidak lengkap atau bernilai "Live"
+    if (row.time === "Live" || !row.date) return;
+
+    // Ambil jam saja dari format waktu "HH:MM:SS" (misal "08:15:30" diambil "08")
+    const hour = row.time.slice(0, 2);
+
+    // Gabungkan tanggal & jam sebagai Kunci Grouping (format: "YYYY-MM-DD HH:00")
+    const groupKey = `${row.date} ${hour}:00`;
+
+    // Inisialisasi object group jika belum ada
+    if (!groups[groupKey]) {
+      groups[groupKey] = {
+        sum: 0,
+        count: 0
+      };
+    }
+
+    // Ambil nilai sensor sesuai dengan parameter detail yang sedang aktif
+    let val = 0;
+    if (activeDetail === 'Suhu Air') val = parseFloat(row.temp);
+    else if (activeDetail === 'pH Level') val = parseFloat(row.ph);
+    else if (activeDetail === 'O2 Terlarut') val = parseFloat(row.doVal);
+    else if (activeDetail === 'TDS Nutrisi') val = parseFloat(row.tdsVal);
+    else if (activeDetail === 'Flow 1') val = parseFloat(row.flow);
+    else if (activeDetail === 'Flow 2') val = parseFloat(row.f2);
+
+    // Akumulasikan nilai jika valid
+    if (!isNaN(val)) {
+      groups[groupKey].sum += val;
+      groups[groupKey].count += 1;
+    }
+  });
+
+  // Konversi Object Group menjadi Array agar bisa dibaca grafik
+  const aggregated = Object.keys(groups).map(key => {
+    const group = groups[key];
+    const avg = group.count > 0 ? group.sum / group.count : 0;
+
+    return {
+      time: key, // e.g. "2026-06-24 08:00"
+      val: parseFloat(avg.toFixed(activeDetail === 'pH Level' ? 2 : 1))
+    };
+  });
+
+  // Urutkan data secara kronologis (dari waktu terlama ke terbaru)
+  return aggregated.sort((a, b) => a.time.localeCompare(b.time));
+};
+
 
 export default function App() {
   const [devices, setDevices] = useState([]);
@@ -24,8 +80,9 @@ export default function App() {
   const [allStatuses, setAllStatuses] = useState({});
   const [filterDate, setFilterDate] = useState(''); // <-- STATE FILTER TANGGAL UDAH ADA
   const [showCctvModal, setShowCctvModal] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  /// FUNGSI LOGOUT (KURAS MEMORI TOTAL)
+  /// Fungsi penanganan logout dan pembersihan state session
   const handleLogout = () => {
     localStorage.removeItem('userId');
     //localStorage.removeItem('lastViewedDevice');
@@ -40,7 +97,7 @@ export default function App() {
 
   const fetchDevices = () => {
     if (!userId) { setIsLoading(false); return; }
-    fetch(`https://api.aquasafe.my.id/api/devices/${userId}`)
+    fetch(`${API_BASE_URL}/api/devices/${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data && data.length > 0) {
@@ -67,10 +124,18 @@ export default function App() {
     if (selectedDevice) localStorage.setItem('lastViewedDevice', selectedDevice);
   }, [selectedDevice]);
 
+  // Reset state parameter & tabel riwayat ketika berganti perangkat (agar tidak terbawa dari perangkat sebelumnya)
+  useEffect(() => {
+    if (selectedDevice) {
+      setSensorData({ suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, power: true });
+      setTableData([]);
+    }
+  }, [selectedDevice]);
+
   useEffect(() => {
     if (!selectedDevice || !userId) return;
     const fetchData = () => {
-      fetch(`https://api.aquasafe.my.id/api/sensor/${selectedDevice}`)
+      fetch(`${API_BASE_URL}/api/sensor/${selectedDevice}`)
         .then(res => res.json())
         .then(data => {
           if (data.suhu !== undefined) {
@@ -85,7 +150,7 @@ export default function App() {
 
       // === UBAH JALUR FETCH HISTORY AGAR NGIRIM PARAMETER TANGGAL KE BACKEND ===
       const dateQuery = filterDate ? `?date=${filterDate}` : '';
-      fetch(`https://api.aquasafe.my.id/api/history/${selectedDevice}${dateQuery}`)
+      fetch(`${API_BASE_URL}/api/history/${selectedDevice}${dateQuery}`)
         .then(res => res.json())
         .then(data => {
           if (Array.isArray(data)) {
@@ -119,7 +184,7 @@ export default function App() {
           }
         });
 
-      fetch(`https://api.aquasafe.my.id/api/status/all`)
+      fetch(`${API_BASE_URL}/api/status/all`)
         .then(res => res.json())
         .then(data => setAllStatuses(data));
     };
@@ -130,13 +195,31 @@ export default function App() {
   }, [selectedDevice, userId, filterDate]); // <-- Tambahkan filterDate ke array dependensi agar fetch terpicu ulang saat ganti tanggal
 
   const handleAddNewDevice = (newDevice) => {
-    fetch('https://api.aquasafe.my.id/api/devices', {
+    fetch(`${API_BASE_URL}/api/devices`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ device_id: newDevice.device_id, user_id: userId, nama_kolam: newDevice.nama_kolam })
     })
       .then(() => { fetchDevices(); setSelectedDevice(newDevice.device_id); setIsAddModalOpen(false); })
       .catch(err => console.error("Gagal menyimpan ke server:", err));
+  };
+
+  const handleEditDeviceName = (deviceId, newName) => {
+    fetch(`${API_BASE_URL}/api/devices/${deviceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nama_kolam: newName })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          // Memperbarui state secara lokal agar nama langsung berubah di UI tanpa reload
+          setDevices(prev => prev.map(d => d.device_id === deviceId ? { ...d, nama_kolam: newName } : d));
+        } else {
+          console.error("Gagal mengubah nama kolam:", data.message);
+        }
+      })
+      .catch(err => console.error("Gagal terhubung ke server:", err));
   };
 
   // === PERUBAHAN 2: LOGIKA FILTER DITAMBAH TANGGAL ===
@@ -146,7 +229,7 @@ export default function App() {
     return matchSearch && matchDate;
   });
 
-  // === OTAK SATPAM ALARM DIPERBAIKI ===
+  // === Logika Pemantau Ambang Batas Sensor & Alarm ===
   // Jika server tidak menerima update lebih dari 5 menit (300000 ms), anggap mati!
   const isMati = !sensorData?.lastUpdated || (Date.now() - sensorData.lastUpdated > 300000);
   const activeAlarms = [];
@@ -214,9 +297,9 @@ export default function App() {
       case 'TDS Nutrisi':
         return { val: sensorData.tds, unit: 'PPM', ...getStyle(isTdsBahaya, 'text-lime-400', 'bg-[#141f12]', 'border-lime-900/50', '#a3e635'), icon: <Leaf />, desc: "Total padatan terlarut sebagai indikator nutrisi." };
       case 'Flow 1':
-        return { val: sensorData.flow1, unit: 'L/M', ...getStyle(isFlow1Bahaya, 'text-sky-400', 'bg-[#0c1e2e]', 'border-sky-900/50', '#38bdf8'), icon: <RefreshCcw />, desc: "Debit sirkulasi air utama." };
+        return { val: sensorData.flow1, unit: 'L/M', ...getStyle(isFlow1Bahaya, 'text-sky-400', 'bg-[#0c1e2e]', 'border-sky-900/50', '#38bdf8'), icon: <Waves />, desc: "Debit sirkulasi air utama." };
       case 'Flow 2':
-        return { val: sensorData.flow2, unit: 'L/M', ...getStyle(isFlow2Bahaya, 'text-teal-400', 'bg-[#0d2222]', 'border-teal-900/50', '#2dd4bf'), icon: <Filter />, desc: "Kecepatan aliran pengolahan biofilter." };
+        return { val: sensorData.flow2, unit: 'L/M', ...getStyle(isFlow2Bahaya, 'text-teal-400', 'bg-[#0d2222]', 'border-teal-900/50', '#2dd4bf'), icon: <Waves />, desc: "Kecepatan aliran pengolahan biofilter." };
       default:
         return { val: 0, unit: '', color: 'text-gray-400', bg: 'bg-[#131b2c]', border: 'border-gray-800', hex: '#9ca3af', icon: <Activity />, desc: "" };
     }
@@ -265,9 +348,9 @@ export default function App() {
       <div className="absolute inset-0 bg-[#030712]/90 backdrop-blur-md z-0 pointer-events-none fixed"></div>
 
       {/* Konten Utama Dasbor dibungkus relative z-10 */}
-      <div className="relative z-10 p-4 md:p-8">
+      <div className="relative z-10 p-4 md:p-5 flex flex-col min-h-screen xl:h-screen xl:overflow-auto">
         <button
-          onClick={handleLogout}
+          onClick={() => setShowLogoutConfirm(true)}
           className="fixed bottom-6 right-6 z-50 flex items-center justify-center gap-2 bg-red-600/20 border border-red-500/30 text-red-400 p-4 rounded-full shadow-[0_0_20px_rgba(220,38,38,0.15)] hover:bg-red-600 hover:text-white hover:shadow-[0_0_25px_rgba(220,38,38,0.5)] hover:scale-105 backdrop-blur-md transition-all duration-300 group"
         >
           <LogOut className="w-5 h-5" />
@@ -276,85 +359,115 @@ export default function App() {
           </span>
         </button>
 
-        <Header
-          devices={sortedDevices}
-          selectedDevice={selectedDevice}
-          setSelectedDevice={setSelectedDevice}
-          sensorData={sensorData}
-          activeAlarms={activeAlarms}
-          onOpenAddModal={() => setIsAddModalOpen(true)}
-          onOpenCctvModal={() => setShowCctvModal(true)}
-          allStatuses={allStatuses}
-          userName={userName}
-        />
+        <div className="max-w-[1800px] w-full mx-auto flex flex-col flex-1 min-h-0">
+          <Header
+            devices={sortedDevices}
+            selectedDevice={selectedDevice}
+            setSelectedDevice={setSelectedDevice}
+            sensorData={sensorData}
+            activeAlarms={activeAlarms}
+            onOpenAddModal={() => setIsAddModalOpen(true)}
+            onOpenCctvModal={() => setShowCctvModal(true)}
+            allStatuses={allStatuses}
+            userName={userName}
+            onEditDeviceName={handleEditDeviceName}
+          />
 
-        <AddDeviceModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAdd={handleAddNewDevice} />
+          <AddDeviceModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAdd={handleAddNewDevice} />
 
+          <main className="w-full flex-1 flex flex-col min-h-0">
+            {isLoading ? (
+              <div className="min-h-[70vh] flex items-center justify-center text-slate-500">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+              </div>
+            ) : devices.length === 0 ? (
+              <EmptyState onOpenAddModal={() => setIsAddModalOpen(true)} />
+            ) : activeDetail === null ? (
+              <Overview
+                key={selectedDevice}
+                getDetailConfig={getDetailConfig}
+                setActiveDetail={setActiveDetail}
+                filteredTableData={filteredTableData}
+                searchQuery={searchQuery}
+                setSearchQuery={setSearchQuery}
+                activeAlarms={activeAlarms}
+                selectedDevice={selectedDevice}
+                sensorData={sensorData}
+                // === PERUBAHAN 4: NGIRIM PROPS KALENDER KE OVERVIEW ===
+                filterDate={filterDate}
+                setFilterDate={setFilterDate}
+              />
+            ) : (
+              <DetailView
+                key={`${selectedDevice}-${activeDetail}`}
+                activeDetail={activeDetail}
+                setActiveDetail={setActiveDetail}
+                detailData={getDetailConfig(activeDetail)}
+                sensorData={sensorData} // Mengirim data sensor beserta nilai agregasi
+                chartData={getHourlyData(tableData, activeDetail)} // Selalu per jam
+                selectedDevice={selectedDevice}
+                filterDate={filterDate}   // Kirim state tanggal
+                setFilterDate={setFilterDate} // Kirim updater tanggal
+              />
+            )}
+          </main>
 
+          {/* Modal CCTV live stream */}
+          {showCctvModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-bg-overlay/80 backdrop-blur-md p-4 pt-16 md:p-8 animate-in fade-in duration-300">
+              <div className="w-full max-w-3xl relative">
+                {/* Tombol Close */}
+                <button
+                  onClick={() => setShowCctvModal(false)}
+                  className="absolute -top-12 right-0 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-full p-2 transition-all hover:rotate-90 z-10 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+                >
+                  <X size={20} />
+                </button>
 
-        <main className="max-w-[1800px] mx-auto">
-          {isLoading ? (
-            <div className="min-h-[70vh] flex items-center justify-center text-slate-500">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-cyan-500"></div>
+                {/* Komponen CCTV */}
+                <CctvKolam deviceId={selectedDevice} />
+              </div>
             </div>
-          ) : devices.length === 0 ? (
-            <EmptyState onOpenAddModal={() => setIsAddModalOpen(true)} />
-          ) : activeDetail === null ? (
-            <Overview
-              getDetailConfig={getDetailConfig}
-              setActiveDetail={setActiveDetail}
-              filteredTableData={filteredTableData}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              activeAlarms={activeAlarms}
-              selectedDevice={selectedDevice}
-              sensorData={sensorData}
-              // === PERUBAHAN 4: NGIRIM PROPS KALENDER KE OVERVIEW ===
-              filterDate={filterDate}
-              setFilterDate={setFilterDate}
-            />
-          ) : (
-            <DetailView
-              activeDetail={activeDetail}
-              setActiveDetail={setActiveDetail}
-              detailData={getDetailConfig(activeDetail)}
-              sensorData={sensorData} // 🔥 KIRIM DATA SENSOR (YANG ADA RATA-RATANYA)
-              // === OTAK PEMILIH DATA GRAFIK (DINAMIS) ===
-              chartData={tableData.slice(0, 15).reverse().map(d => {
-                let chartVal = 0;
-                if (activeDetail === 'Suhu Air') chartVal = parseFloat(d.temp);
-                else if (activeDetail === 'pH Level') chartVal = parseFloat(d.ph);
-                else if (activeDetail === 'O2 Terlarut') chartVal = parseFloat(d.doVal);
-                else if (activeDetail === 'TDS Nutrisi') chartVal = parseFloat(d.tdsVal);
-                else if (activeDetail === 'Flow 1') chartVal = parseFloat(d.flow);
-                else if (activeDetail === 'Flow 2') chartVal = parseFloat(d.f2);
-
-                return { time: d.fullTime, val: chartVal };
-              })}
-              selectedDevice={selectedDevice}
-            />
           )}
-        </main>
 
-        {/* 🔥 MODAL CCTV (LIFTED TO APP.JSX) */}
-        {showCctvModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0a0f1a]/80 backdrop-blur-md px-4 animate-in fade-in duration-300">
-            <div className="w-full max-w-3xl relative">
-              {/* Tombol Close */}
-              <button
-                onClick={() => setShowCctvModal(false)}
-                className="absolute -top-12 right-0 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-full p-2 transition-all hover:rotate-90 z-10 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
-              >
-                <X size={20} />
-              </button>
+          {/* Modal Konfirmasi Logout ditaruh di sini */}
+          {showLogoutConfirm && createPortal(
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-bg-overlay/85 backdrop-blur-sm px-4 animate-in fade-in duration-300">
+              <div className="bg-surface-card/90 backdrop-blur-xl border border-white/10 p-7 rounded-[2rem] shadow-2xl max-w-sm w-full flex flex-col gap-4 text-center relative overflow-hidden">
+                <div className="absolute -right-10 -top-10 w-36 h-36 bg-red-500/10 rounded-full blur-2xl pointer-events-none" />
 
-              {/* Komponen CCTV */}
-              <CctvKolam />
-            </div>
-          </div>
-        )}
+                <h3 className="text-sm font-black tracking-widest text-white uppercase relative z-10">
+                  Konfirmasi Keluar
+                </h3>
+
+                <p className="text-xs font-medium leading-relaxed text-slate-300 relative z-10 px-2">
+                  Apakah Anda yakin ingin keluar dari <span className="font-black text-cyan-400">AquaSafe</span>?
+                </p>
+
+                <div className="flex gap-3 mt-1 relative z-10">
+                  <button
+                    onClick={() => setShowLogoutConfirm(false)}
+                    className="flex-1 px-4 py-3 bg-black/40 hover:bg-white/5 text-slate-300 font-black text-[10px] tracking-widest uppercase rounded-xl transition-all border border-white/5"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowLogoutConfirm(false);
+                      handleLogout();
+                    }}
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-red-600 to-rose-500 hover:from-red-500 hover:to-rose-400 text-white font-black text-[10px] tracking-widest uppercase rounded-xl transition-all shadow-[0_0_20px_rgba(239,68,68,0.3)] hover:shadow-[0_0_25px_rgba(239,68,68,0.5)]"
+                  >
+                    Ya, Keluar
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
+
+        </div>
       </div>
-
     </div>
   );
 }
