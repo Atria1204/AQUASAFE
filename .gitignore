@@ -22,3 +22,10 @@ NUC/
 
 # Mengabaikan .agent/
 .agent/
+
+# Mengabaikan learning.md
+learning.md
+FOR learning.md
+
+# Mengabaikan STEP_SUMMARY.md
+STEP_BY_STEP.md
