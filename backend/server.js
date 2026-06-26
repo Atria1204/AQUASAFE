@@ -174,16 +174,6 @@ app.post('/api/sensor/update', (req, res) => {
 
     currentData[deviceId] = { ...currentData[deviceId], ...data, lastUpdated: Date.now() };
 
-    const sql = `INSERT INTO sensor_logs (device_id, suhu, ph, do_level, tds, flow1, flow2) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-    const values = [
-        deviceId, data.suhu, data.ph, data.do, data.tds,
-        data.flow1, data.flow2
-    ];
-
-    db.query(sql, values, (err) => {
-        if (err) console.error(`❌ Gagal log HTTP [${deviceId}]:`, err.message);
-    });
-
     const sql2 = 'SELECT * FROM Pakan WHERE device_id = ?;';
     db.query(sql2, [deviceId], (err, result) => {
         if (err) {
@@ -210,7 +200,7 @@ app.post('/api/sensor/update', (req, res) => {
 });
 
 // JALUR MQTT LOKAL (CADANGAN)
-const mqttClient = mqtt.connect('mqtt://100.64.178.105:1883');
+const mqttClient = mqtt.connect(`${process.env.MQTT_BROKER_URL}`);
 mqttClient.on('connect', () => {
     console.log('✅ Terhubung ke MQTT Broker Lokal!');
     mqttClient.subscribe('aquasafe/data/+', (err) => {
@@ -244,13 +234,6 @@ mqttClient.on('message', (topic, message) => {
         checkAndLogEvents(deviceId, data);
 
         currentData[deviceId] = { ...currentData[deviceId], ...data, lastUpdated: Date.now() };
-
-        const sql = `INSERT INTO sensor_logs (device_id, suhu, ph, do_level, tds, flow1, flow2, flow3, flow4) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-        const values = [deviceId, currentData[deviceId].suhu, currentData[deviceId].ph, currentData[deviceId].do, currentData[deviceId].tds, currentData[deviceId].flow1, currentData[deviceId].flow2, currentData[deviceId].flow3, currentData[deviceId].flow4];
-
-        db.query(sql, values, (err) => {
-            if (err) console.error(`❌ Gagal mencatat log DB [${deviceId}]:`, err.message);
-        });
     } catch (error) {
         console.error('❌ Kesalahan parsing JSON MQTT:', error.message);
     }
@@ -290,6 +273,56 @@ app.post('/api/devices', (req, res) => {
         res.json({ success: true, message: "Perangkat berhasil didaftarkan" });
     });
 });
+
+app.put('/api/devices/:deviceId', (req, res) => {
+    const deviceId = req.params.deviceId;
+    const { nama_kolam } = req.body;
+
+    const sql = 'UPDATE devices SET nama_kolam = ? WHERE device_id = ?';
+
+    db.query(sql, [nama_kolam, deviceId], (err, result) => {
+        if (err) {
+            console.error('Gagal update nama:', err);
+            return res.status(500).json({ success: false, message: 'Gagal update nama perangkat' });
+        }
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Device tidak ditemukan' });
+        }
+
+        res.json({ success: true, message: 'Nama kolam berhasil diubah!' });
+    });
+});
+
+app.delete('/api/devices/:deviceId', async (req, res) => {
+    const deviceId = req.params.deviceId;
+
+    try {
+        // Hapus dari sensor_logs
+        await db.promise().query('DELETE FROM sensor_logs WHERE device_id = ?', [deviceId]);
+
+        // Hapus dari pakan_logs
+        await db.promise().query('DELETE FROM pakan_logs WHERE device_id = ?', [deviceId]);
+
+        // Hapus dari device_logs
+        await db.promise().query('DELETE FROM device_logs WHERE device_id = ?', [deviceId]);
+
+        // Terakhir hapus perangkat dari tabel devices (akan men-cascade tabel Pakan)
+        const [result] = await db.promise().query('DELETE FROM devices WHERE device_id = ?', [deviceId]);
+
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ success: false, message: 'Perangkat tidak ditemukan' });
+        }
+
+        delete currentData[deviceId];
+        res.json({ success: true, message: 'Perangkat berhasil dihapus beserta log terkait!' });
+    } catch (err) {
+        console.error('Gagal hapus perangkat:', err);
+        res.status(500).json({ success: false, message: 'Gagal hapus perangkat' });
+    }
+});
+
+
 
 app.get('/api/sensor/:deviceId', (req, res) => {
     const deviceId = req.params.deviceId;
@@ -335,9 +368,10 @@ app.get('/api/history/:deviceId', (req, res) => {
     if (dateFilter) {
         sql += ' AND DATE(waktu) = ?';
         params.push(dateFilter);
+        sql += ' ORDER BY id DESC LIMIT 1500';
+    } else {
+        sql += ' ORDER BY id DESC LIMIT 400';
     }
-
-    sql += ' ORDER BY id DESC LIMIT 400';
 
     db.query(sql, params, (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -475,6 +509,21 @@ const runBackgroundJob = () => {
     deviceIds.forEach(deviceId => {
         const cData = currentData[deviceId];
 
+        // --- LOG SENSOR SNAPSHOT TO DATABASE ONCE EVERY 1 MINUTE ---
+        const lastLogTime = cData.lastLoggedSensorTime || 0;
+        if (cData.lastUpdated && cData.lastUpdated > lastLogTime) {
+            const sql = `INSERT INTO sensor_logs (device_id, suhu, ph, do_level, tds, flow1, flow2) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+            const values = [deviceId, cData.suhu, cData.ph, cData.do, cData.tds, cData.flow1, cData.flow2];
+
+            db.query(sql, values, (err) => {
+                if (err) {
+                    console.error(`❌ Gagal mencatat log DB [${deviceId}]:`, err.message);
+                } else {
+                    cData.lastLoggedSensorTime = currentTime; // Track last logged timestamp
+                }
+            });
+        }
+
         // --- CEK LOG OFFLINE / ONLINE ---
         if (cData.lastUpdated && (currentTime - cData.lastUpdated > 300000)) {
             // Alat terdeteksi mati (tidak ada kabar > 5 menit)
@@ -494,15 +543,16 @@ const runBackgroundJob = () => {
 
         const query = `
             SELECT 
-                AVG(suhu) as avg_suhu,
-                AVG(ph) as avg_ph,
-                AVG(do_level) as avg_do,
-                AVG(tds) as avg_tds,
-                AVG(flow1) as avg_flow1,
-                AVG(flow2) as avg_flow2
+                AVG(suhu) as avg_suhu, MIN(suhu) as min_suhu, MAX(suhu) as max_suhu,
+                AVG(ph) as avg_ph, MIN(ph) as min_ph, MAX(ph) as max_ph,
+                AVG(do_level) as avg_do, MIN(do_level) as min_do, MAX(do_level) as max_do,
+                AVG(tds) as avg_tds, MIN(tds) as min_tds, MAX(tds) as max_tds,
+                AVG(flow1) as avg_flow1, MIN(flow1) as min_flow1, MAX(flow1) as max_flow1,
+                AVG(flow2) as avg_flow2, MIN(flow2) as min_flow2, MAX(flow2) as max_flow2
             FROM sensor_logs 
             WHERE device_id = ? AND waktu >= NOW() - INTERVAL 24 HOUR
         `;
+
         db.query(query, [deviceId], (err, results) => {
             if (!err && results.length > 0 && currentData[deviceId]) {
                 // Sisipkan data rata-rata langsung ke memory server
@@ -518,103 +568,135 @@ setTimeout(runBackgroundJob, 2000); // Eksekusi awal 2 detik setelah server hidu
 // =================================================================
 // 7. SISTEM CCTV (WEBSOCKETS KONTROL ON/OFF & SINKRONISASI GLOBAL)
 // =================================================================
-const viewers = new Set();
-let esp32Socket = null;
-let isCameraStreaming = false; // Tambahan: Menyimpan status global kamera
+// STRUKTUR PENAMPUNG MULTI-KAMERA (DENGAN PER-USER AUTO SHUTDOWN)
+// =================================================================
+const esp32Sockets = new Map(); // Map<deviceId, WebSocket>
+const viewersMap = new Map();   // Map<deviceId, Set<WebSocket>>
+const cameraStreamingStates = new Map(); // Map<deviceId, boolean>
 
-function broadcastEspStatus() {
-    const statusMsg = JSON.stringify({
-        type: "ESP_STATUS",
-        isReady: esp32Socket !== null,
-        isStreaming: isCameraStreaming // Tambahan: Menyiarkan status ON/OFF ke semua React
-    });
-    for (let viewer of viewers) {
-        if (viewer.readyState === WebSocket.OPEN) {
-            viewer.send(statusMsg);
+function broadcastEspStatus(deviceId) {
+    const isReady = esp32Sockets.has(deviceId);
+    const isStreaming = cameraStreamingStates.get(deviceId) || false;
+
+    const viewers = viewersMap.get(deviceId);
+    if (viewers) {
+        const statusMsg = JSON.stringify({
+            type: "ESP_STATUS",
+            isReady,
+            isStreaming
+        });
+        for (let viewer of viewers) {
+            if (viewer.readyState === WebSocket.OPEN) {
+                viewer.send(statusMsg);
+            }
         }
     }
 }
 
 wss.on('connection', (ws, req) => {
-    if (req.url === '/api/stream/input') {
-        esp32Socket = ws;
-        broadcastEspStatus();
+    const parsedUrl = new URL(req.url, 'http://localhost');
+    const pathname = parsedUrl.pathname;
+    const deviceId = parsedUrl.searchParams.get('deviceId') || 'AQUA-001';
+
+    if (pathname === '/api/stream/input') {
+        console.log(`📷 [CCTV] ESP32-CAM untuk device ${deviceId} berhasil terhubung!`);
+
+        // Putuskan koneksi lama jika ada untuk deviceId ini
+        if (esp32Sockets.has(deviceId)) {
+            const oldWs = esp32Sockets.get(deviceId);
+            oldWs.close();
+        }
+
+        esp32Sockets.set(deviceId, ws);
+        broadcastEspStatus(deviceId);
 
         ws.on('message', (message) => {
-            for (let viewer of viewers) {
-                if (viewer.readyState === WebSocket.OPEN) {
-                    viewer.send(message);
+            // Forward binary frame ke semua viewers untuk deviceId ini
+            const viewers = viewersMap.get(deviceId);
+            if (viewers) {
+                for (let viewer of viewers) {
+                    if (viewer.readyState === WebSocket.OPEN) {
+                        viewer.send(message);
+                    }
                 }
             }
         });
 
         ws.on('close', () => {
-            esp32Socket = null;
-            isCameraStreaming = false; // Reset status saat alat mati
-            broadcastEspStatus();
+            console.log(`📷 [CCTV] Koneksi ESP32-CAM untuk device ${deviceId} terputus!`);
+            esp32Sockets.delete(deviceId);
+            cameraStreamingStates.set(deviceId, false);
+            broadcastEspStatus(deviceId);
         });
     }
-    else if (req.url === '/api/stream/output') {
+    else if (pathname === '/api/stream/output') {
+        if (!viewersMap.has(deviceId)) {
+            viewersMap.set(deviceId, new Set());
+        }
+        const viewers = viewersMap.get(deviceId);
         viewers.add(ws);
+
         if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({
                 type: "ESP_STATUS",
-                isReady: esp32Socket !== null,
-                isStreaming: isCameraStreaming // Beritahu laptop yang baru buka web
+                isReady: esp32Sockets.has(deviceId),
+                isStreaming: cameraStreamingStates.get(deviceId) || false
             }));
         }
 
-        ws.on('close', () => viewers.delete(ws));
+        ws.on('close', () => {
+            viewers.delete(ws);
+            if (viewers.size === 0) {
+                viewersMap.delete(deviceId);
+                // === AUTO SHUTDOWN JIKA SUDAH TIDAK ADA PENONTON ===
+                if (cameraStreamingStates.get(deviceId) === true) {
+                    console.log(`🔌 [CCTV] Tidak ada penonton aktif untuk ${deviceId}. Menghentikan stream kamera.`);
+                    cameraStreamingStates.set(deviceId, false);
+
+                    const camWs = esp32Sockets.get(deviceId);
+                    if (camWs && camWs.readyState === WebSocket.OPEN) {
+                        camWs.send("CMD:STOP");
+                    }
+                    broadcastEspStatus(deviceId);
+                }
+            }
+        });
     } else {
         ws.close();
     }
 });
 
-// app.post('/api/kamera/toggle', (req, res) => {
-//     const { action } = req.body;
-//     // [LOG 3] Cek apakah API /toggle dipanggil oleh React
-//     console.log(`\n=========================================`);
-//     console.log(`[BACKEND] Menerima perintah dari web: ${action}`);
-
-//     if (esp32Socket && esp32Socket.readyState === WebSocket.OPEN) {
-//         isCameraStreaming = (action === "ON"); // Perbarui memori global
-//         esp32Socket.send(action === "ON" ? "CMD:START" : "CMD:STOP");
-//         // [LOG 4] Bukti bahwa server menembakkan teks ke ESP32
-//         console.log(`[BACKEND] Meneruskan teks ke ESP32: "${action}"`);
-
-//         broadcastEspStatus(); // Paksa semua laptop menyamakan tampilan tombol
-
-//         res.json({ success: true, message: `Kamera ${action}` });
-//     } else {
-//         console.log(`[BACKEND] GAGAL! ESP32 belum masuk ke pipa server.`);
-//         res.status(400).json({ success: false, message: "Kamera offline/belum terhubung" });
-//     }
-// });
-
 app.post('/api/kamera/toggle', (req, res) => {
-    const { action } = req.body; // action bernilai "ON" atau "OFF"
+    const { action, deviceId: reqDeviceId } = req.body; // action: "ON" atau "OFF"
+    const deviceId = reqDeviceId || 'AQUA-001';
 
     console.log(`\n=========================================`);
-    console.log(`[BACKEND] Menerima perintah dari web: ${action}`);
+    console.log(`[BACKEND] Menerima perintah dari web untuk ${deviceId}: ${action}`);
 
-    // LANGSUNG TEMBAK ke MQTT Publik (HiveMQ) tanpa peduli status WebSockets
-    const topic = 'aquasafe/kamera/kolam1/kontrol';
+    // Topik MQTT disesuaikan dengan ID Kolam (Misal: aquasafe/kamera/AQUA-001/kontrol)
+    const topic = `aquasafe/kamera/${deviceId}/kontrol`;
 
+    // 1. Kirim via MQTT (untuk cadangan / device lain)
     publicMqttClient.publish(topic, action, (err) => {
-        if (err) {
-            console.error('❌ Gagal mengirim perintah MQTT ke ESP32:', err);
-            return res.status(500).json({ success: false, message: 'Gagal mengirim instruksi ke kolam' });
-        }
-
-        console.log(`📡 [MQTT Publik] Perintah '${action}' berhasil disiarkan ke topik ${topic}`);
-
-        // Perbarui memori global dan paksa semua layar web mengaktifkan state kamera
-        isCameraStreaming = (action === "ON");
-        broadcastEspStatus();
-
-        res.json({ success: true, message: `Instruksi ${action} terkirim!` });
+        if (err) console.error(`❌ Gagal mengirim MQTT ke ${topic}:`, err);
     });
+
+    // 2. KIRIM LANGSUNG VIA WEBSOCKET KE ESP32-CAM
+    const camWs = esp32Sockets.get(deviceId);
+    if (camWs && camWs.readyState === WebSocket.OPEN) {
+        const cmd = action === "ON" ? "CMD:START" : "CMD:STOP";
+        camWs.send(cmd);
+        console.log(`✉️ Berhasil mengirim perintah WebSocket ke ESP32 (${deviceId}): ${cmd}`);
+    } else {
+        console.log(`⚠️ ESP32-CAM untuk ${deviceId} tidak terhubung ke WebSocket backend!`);
+    }
+
+    cameraStreamingStates.set(deviceId, action === "ON");
+    broadcastEspStatus(deviceId);
+
+    res.json({ success: true, message: `Perintah ${action} untuk ${deviceId} diproses!` });
 });
+
 
 server.listen(PORT, () => {
     console.log(`🚀 Server Backend Multi-Device berjalan pada port ${PORT} (Dengan WebSockets)`);
