@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Camera, RefreshCw, Activity, WifiOff, Power } from 'lucide-react';
+import { Camera, Activity, WifiOff, Power } from 'lucide-react';
+import { API_BASE_URL, WS_BASE_URL } from '../config';
 
-const CctvKolam = () => {
+
+const CctvKolam = ({ deviceId }) => {
     const [imageUrl, setImageUrl] = useState('');
     const [isConnected, setIsConnected] = useState(false);
     const [isCamActive, setIsCamActive] = useState(false);
@@ -18,6 +20,11 @@ const CctvKolam = () => {
         isCamActiveRef.current = isCamActive;
     }, [isCamActive]);
 
+    const deviceIdRef = useRef(deviceId);
+    useEffect(() => {
+        deviceIdRef.current = deviceId;
+    }, [deviceId]);
+
     // 1. EFEK UNMOUNT (Menembak sinyal OFF saat Pop-up ditutup)
     useEffect(() => {
         return () => {
@@ -25,11 +32,11 @@ const CctvKolam = () => {
             if (isCamActiveRef.current) {
                 console.log("[FRONTEND] Pop-up tertutup! Memaksa kamera OFF dari latar belakang...");
                 // Menggunakan keepalive: true agar fetch tetap jalan walaupun web sudah tidak menampilkan popup
-                fetch('https://api.aquasafe.my.id/api/kamera/toggle', {
+                fetch(`${API_BASE_URL}/api/kamera/toggle`, {
                     method: 'POST',
                     keepalive: true,
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: "OFF" })
+                    body: JSON.stringify({ action: "OFF", deviceId: deviceIdRef.current })
                 }).catch(err => console.error("Gagal Auto-OFF:", err));
             }
         };
@@ -37,7 +44,8 @@ const CctvKolam = () => {
 
     // 2. EFEK WEBSOCKETS
     useEffect(() => {
-        const wsUrl = 'wss://api.aquasafe.my.id/api/stream/output';
+        if (!deviceId) return;
+        const wsUrl = `${WS_BASE_URL}/api/stream/output?deviceId=${deviceId}`;
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
 
@@ -68,7 +76,7 @@ const CctvKolam = () => {
         return () => {
             if (wsRef.current) wsRef.current.close();
         };
-    }, []);
+    }, [deviceId]);
 
     // 3. EFEK DETEKSI JARINGAN LOKAL
     const [isNetworkOnline, setIsNetworkOnline] = useState(navigator.onLine);
@@ -100,12 +108,12 @@ const CctvKolam = () => {
         setIsCooldown(true);
         const newAction = isCamActive ? "OFF" : "ON";
 
-        console.log(`[FRONTEND] Tombol ditekan! Mengirim perintah: ${newAction}`);
+        console.log(`[FRONTEND] Tombol ditekan! Mengirim perintah ${newAction} untuk ${deviceId}`);
         try {
-            const res = await fetch('https://api.aquasafe.my.id/api/kamera/toggle', {
+            const res = await fetch(`${API_BASE_URL}/api/kamera/toggle`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: newAction })
+                body: JSON.stringify({ action: newAction, deviceId })
             });
             const data = await res.json();
 
@@ -143,33 +151,42 @@ const CctvKolam = () => {
         <div className="backdrop-blur-2xl bg-[#0f172a]/95 border border-white/10 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden flex flex-col w-full">
             <div className={`absolute -left-20 -top-20 w-64 h-64 rounded-full blur-[80px] opacity-15 pointer-events-none transition-colors duration-500 ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
 
-            <div className="relative z-10 flex items-center justify-between mb-4 border-b border-white/[0.05] pb-4">
+            <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between mb-4 border-b border-white/[0.05] pb-4 gap-4">
                 <div className="flex items-center gap-3">
                     <div className={`p-2 border rounded-xl transition-colors duration-300 ${isConnected ? 'bg-emerald-500/25 border-emerald-500/35 text-emerald-300' : 'bg-red-500/25 border-red-500/35 text-red-300'}`}>
                         <Camera size={18} className={isConnected && isCamActive ? 'animate-pulse' : ''} />
                     </div>
-                    <h2 className="text-sm font-black tracking-widest uppercase text-white drop-shadow-sm">Live Monitor Kolam</h2>
+                    <h2 className="text-sm font-black tracking-widest uppercase text-white drop-shadow-sm truncate">Live Monitor Kolam</h2>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-row items-center gap-2 w-full md:w-auto">
                     <button
                         onClick={handleToggleCamera}
-                        disabled={!isConnected || isCooldown}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all border 
-                            ${(!isConnected || isCooldown) ? 'opacity-50 cursor-not-allowed bg-slate-800 border-slate-700 text-slate-500'
+                        disabled={!isConnected || !isEspReady || isCooldown}
+                        className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 rounded-xl text-[10px] font-black tracking-widest uppercase transition-all border 
+                            ${(!isConnected || !isEspReady || isCooldown) ? 'opacity-50 cursor-not-allowed bg-slate-800 border-slate-700 text-slate-500'
                                 : isCamActive ? 'bg-red-500/20 text-red-400 border-red-500/40 hover:bg-red-500/30'
                                     : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30'}`}
                     >
                         <Power size={12} /> {isCooldown ? 'Tunggu..' : (isCamActive ? 'Matikan' : 'Nyalakan')}
                     </button>
 
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-bold tracking-widest uppercase border ${isConnected ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 'bg-red-500/10 text-red-400 border-red-500/30'}`}>
-                        {isConnected ? <><Activity size={10} className="animate-pulse" /> Server Ready</> : <><WifiOff size={10} /> Disconnected</>}
+                    <div className={`flex-1 md:flex-none flex items-center justify-center gap-1.5 px-2.5 py-2 md:py-1 rounded-xl md:rounded-full text-[9px] font-bold tracking-widest uppercase border 
+                        ${!isConnected ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                            : isEspReady ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/30'}`}>
+                        {!isConnected ? (
+                            <><WifiOff size={10} /> Terputus</>
+                        ) : isEspReady ? (
+                            <><Activity size={10} className="animate-pulse" />Online</>
+                        ) : (
+                            <><WifiOff size={10} />Offline</>
+                        )}
                     </div>
                 </div>
             </div>
 
-            <div className="relative z-10 w-full rounded-xl overflow-hidden bg-[#0a0f1a] border border-white/5 aspect-video flex items-center justify-center shadow-inner">
+            <div className="relative z-10 w-full rounded-xl overflow-hidden bg-bg-overlay border border-white/5 aspect-video flex items-center justify-center shadow-inner">
 
                 {/* NOTIFIKASI ERROR MERAH OVERLAY */}
                 {errorMessage && (
@@ -191,7 +208,7 @@ const CctvKolam = () => {
                             <>
                                 <Power size={28} className={isCamActive ? "text-emerald-500/50" : "text-slate-600"} />
                                 <span className="text-[10px] uppercase tracking-widest font-bold">
-                                    {isCamActive ? 'Menunggu Frame Pertama...' : 'Kamera Standby (Hemat Kuota)'}
+                                    {isCamActive ? 'Menunggu Frame Pertama...' : 'Kamera Standby'}
                                 </span>
                             </>
                         ) : (

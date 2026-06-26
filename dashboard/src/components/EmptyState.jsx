@@ -3,7 +3,7 @@ import { Rocket, Plus, DatabaseZap } from 'lucide-react';
 
 export default function EmptyState({ onOpenAddModal }) {
     return (
-        <div className="flex-1 flex flex-col items-center justify-center min-h-[70vh] py-12 px-4 animate-in fade-in duration-1000 relative overflow-hidden rounded-[3rem] border border-white/[0.03] bg-[#0a0f1a]/50 backdrop-blur-sm">
+        <div className="flex-1 flex flex-col items-center justify-center min-h-[70vh] py-12 px-4 animate-in fade-in duration-1000 relative overflow-hidden rounded-[3rem] border border-white/[0.03] bg-bg-overlay/50 backdrop-blur-sm">
 
             {/* Bola Cahaya (Orbs) di Belakang buat efek Antigravity */}
             <div className="absolute top-10 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[120px] pointer-events-none animate-pulse" />
@@ -16,7 +16,7 @@ export default function EmptyState({ onOpenAddModal }) {
                 {/* Lingkaran dalam glassmorphism */}
                 <div className="relative p-8 bg-white/5 backdrop-blur-xl rounded-full border border-white/10 shadow-[0_8px_32px_rgba(34,211,238,0.2)]">
                     <Rocket size={70} strokeWidth={1} className="text-cyan-400 drop-shadow-[0_0_15px_rgba(34,211,238,0.7)] rotate-[-15deg] group-hover:rotate-0 transition-transform duration-500" />
-                    <DatabaseZap size={24} className="absolute -bottom-2 -right-2 text-yellow-400 bg-[#0a0f1a] rounded-full p-0.5 border border-yellow-400/50 shadow-lg" />
+                    <DatabaseZap size={24} className="absolute -bottom-2 -right-2 text-yellow-400 bg-bg-overlay rounded-full p-0.5 border border-yellow-400/50 shadow-lg" />
                 </div>
             </div>
 
@@ -33,7 +33,7 @@ export default function EmptyState({ onOpenAddModal }) {
                 <div className="w-16 h-1 bg-gradient-to-r from-blue-500 to-cyan-400 mx-auto rounded-full mb-5" />
 
                 <p className="text-slate-400 text-sm leading-relaxed max-w-sm mx-auto">
-                    Halo! Senang melihat Anda di sini. Akun Anda sudah siap, namun saat ini belum ada kolam yang terdaftar di sistem. Yuk, daftarkan kolam pertama Anda sekarang untuk mulai memantau kondisi air secara langsung!
+                    Halo! Senang melihat Anda di sini. Akun Anda sudah siap, namun saat ini belum ada kolam yang terdaftar di sistem. Daftarkan kolam pertama Anda sekarang untuk mulai memantau kondisi air secara langsung!
                 </p>
             </div>
 

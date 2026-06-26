@@ -1,8 +1,10 @@
 import React, { useMemo } from 'react';
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Activity } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Activity, Calendar, X } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+
+
 
 // KONFIGURASI WARNA NORMAL
 const detailTheme = {
@@ -15,6 +17,23 @@ const detailTheme = {
     'Flow 3': { bgBase: 'from-sky-900/60 to-sky-500/40', text: 'text-sky-200', hex: '#0ea5e9', glow: 'bg-sky-500' },
     'Flow 4': { bgBase: 'from-blue-900/60 to-blue-500/40', text: 'text-blue-200', hex: '#3b82f6', glow: 'bg-blue-500' },
 };
+// Komponen Kustom untuk Label X-Axis Dua Baris (Jam di atas, Tanggal di bawah)
+const CustomXAxisTick = ({ x, y, payload }) => {
+    if (!payload || !payload.value) return null;
+
+    const parts = payload.value.split(' ');
+    const timeVal = parts.length === 2 ? parts[1] : payload.value;
+
+    return (
+        <g transform={`translate(${x},${y})`}>
+            <text x={0} y={10} fill="rgba(255,255,255,0.4)" fontSize={9} textAnchor="middle">
+                {timeVal}
+            </text>
+        </g>
+    );
+};
+
+
 
 export default function DetailView({
     activeDetail,
@@ -22,10 +41,12 @@ export default function DetailView({
     detailData,
     chartData,
     selectedDevice,
-    sensorData
+    sensorData,
+    filterDate,
+    setFilterDate
 }) {
 
-    // === OTAK DETEKSI BAHAYA ===
+    // Batas Parameter
     const val = detailData?.val;
     let isBahaya = false;
 
@@ -47,32 +68,56 @@ export default function DetailView({
         glow: 'bg-red-400 animate-pulse' // Orbs di belakang kedap-kedip merah
     } : (detailTheme[activeDetail] || detailTheme['Suhu Air']);
 
-    // Fungsi pintar buat ngitung Nilai Tertinggi, Terendah, dan Rata-rata
+    // Hitung interval tick dinamis agar sumbu X tidak penuh sesak
+    const tickInterval = useMemo(() => {
+        if (!chartData || chartData.length === 0) return 0;
+        return Math.max(0, Math.floor(chartData.length / 6));
+    }, [chartData]);
+
     const stats = useMemo(() => {
         if (!chartData || chartData.length === 0) return { max: 0, min: 0, avg: 0 };
         const values = chartData.map(d => d.val).filter(v => !isNaN(v));
         if (values.length === 0) return { max: 0, min: 0, avg: 0 };
 
-        const max = Math.max(...values);
-        const min = Math.min(...values);
-        let avg = values.reduce((a, b) => a + b, 0) / values.length; // Fallback rata-rata layar
+        let max = Math.max(...values);
+        let min = Math.min(...values);
+        let avg = values.reduce((a, b) => a + b, 0) / values.length;
 
-        // 🔥 OVERRIDE AVG: Pake data 24 jam dari backend kalau ada
         if (sensorData?.avg24h) {
-            if (activeDetail === 'Suhu Air' && sensorData.avg24h.avg_suhu !== null) avg = sensorData.avg24h.avg_suhu;
-            else if (activeDetail === 'pH Level' && sensorData.avg24h.avg_ph !== null) avg = sensorData.avg24h.avg_ph;
-            else if (activeDetail === 'O2 Terlarut' && sensorData.avg24h.avg_do !== null) avg = sensorData.avg24h.avg_do;
-            else if (activeDetail === 'TDS Nutrisi' && sensorData.avg24h.avg_tds !== null) avg = sensorData.avg24h.avg_tds;
-            else if (activeDetail === 'Flow 1' && sensorData.avg24h.avg_flow1 !== null) avg = sensorData.avg24h.avg_flow1;
-            else if (activeDetail === 'Flow 2' && sensorData.avg24h.avg_flow2 !== null) avg = sensorData.avg24h.avg_flow2;
+            if (activeDetail === 'Suhu Air') {
+                if (sensorData.avg24h.avg_suhu !== null) avg = sensorData.avg24h.avg_suhu;
+                if (sensorData.avg24h.max_suhu !== null) max = sensorData.avg24h.max_suhu;
+                if (sensorData.avg24h.min_suhu !== null) min = sensorData.avg24h.min_suhu;
+            } else if (activeDetail === 'pH Level') {
+                if (sensorData.avg24h.avg_ph !== null) avg = sensorData.avg24h.avg_ph;
+                if (sensorData.avg24h.max_ph !== null) max = sensorData.avg24h.max_ph;
+                if (sensorData.avg24h.min_ph !== null) min = sensorData.avg24h.min_ph;
+            } else if (activeDetail === 'O2 Terlarut') {
+                if (sensorData.avg24h.avg_do !== null) avg = sensorData.avg24h.avg_do;
+                if (sensorData.avg24h.max_do !== null) max = sensorData.avg24h.max_do;
+                if (sensorData.avg24h.min_do !== null) min = sensorData.avg24h.min_do;
+            } else if (activeDetail === 'TDS Nutrisi') {
+                if (sensorData.avg24h.avg_tds !== null) avg = sensorData.avg24h.avg_tds;
+                if (sensorData.avg24h.max_tds !== null) max = sensorData.avg24h.max_tds;
+                if (sensorData.avg24h.min_tds !== null) min = sensorData.avg24h.min_tds;
+            } else if (activeDetail === 'Flow 1') {
+                if (sensorData.avg24h.avg_flow1 !== null) avg = sensorData.avg24h.avg_flow1;
+                if (sensorData.avg24h.max_flow1 !== null) max = sensorData.avg24h.max_flow1;
+                if (sensorData.avg24h.min_flow1 !== null) min = sensorData.avg24h.min_flow1;
+            } else if (activeDetail === 'Flow 2') {
+                if (sensorData.avg24h.avg_flow2 !== null) avg = sensorData.avg24h.avg_flow2;
+                if (sensorData.avg24h.max_flow2 !== null) max = sensorData.avg24h.max_flow2;
+                if (sensorData.avg24h.min_flow2 !== null) min = sensorData.avg24h.min_flow2;
+            }
         }
 
         return {
-            max: max.toFixed(activeDetail === 'pH Level' ? 2 : 1),
-            min: min.toFixed(activeDetail === 'pH Level' ? 2 : 1),
-            avg: (avg || 0).toFixed(activeDetail === 'pH Level' ? 2 : 1)
+            max: Number(max).toFixed(activeDetail === 'pH Level' ? 2 : 1),
+            min: Number(min).toFixed(activeDetail === 'pH Level' ? 2 : 1),
+            avg: Number(avg || 0).toFixed(activeDetail === 'pH Level' ? 2 : 1)
         };
     }, [chartData, activeDetail, sensorData]);
+
 
     // Tooltip Kustom buat Grafik
     const CustomTooltip = ({ active, payload, label }) => {
@@ -96,7 +141,7 @@ export default function DetailView({
             <div className="flex items-center gap-4">
                 <button
                     onClick={() => setActiveDetail(null)}
-                    className="p-2.5 bg-[#131b2c] border border-white/10 hover:border-white/30 rounded-full text-slate-300 hover:text-white transition-all duration-300 hover:-translate-x-1 shadow-lg"
+                    className="p-2.5 bg-surface-card/80 border border-white/10 hover:border-white/30 rounded-full text-slate-300 hover:text-white transition-all duration-300 hover:-translate-x-1 shadow-lg"
                 >
                     <ArrowLeft size={20} />
                 </button>
@@ -111,7 +156,7 @@ export default function DetailView({
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
 
                 {/* KOLOM KIRI: INFO UTAMA & STATISTIK */}
                 <div className="flex flex-col gap-6">
@@ -138,27 +183,30 @@ export default function DetailView({
 
                     {/* Kartu Mini Statistik (Max, Avg, Min) */}
                     <div className="grid grid-cols-3 gap-4">
-                        <div className="backdrop-blur-xl bg-[#131b2c]/80 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-lg">
+                        <div className="backdrop-blur-xl bg-surface-card/80 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-lg">
+
                             <TrendingUp size={16} className="text-red-400 mb-2" />
                             <span className="text-lg font-black text-white">{stats.max}</span>
                             <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mt-1">Tertinggi</span>
                         </div>
-                        <div className="backdrop-blur-xl bg-[#131b2c]/80 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-lg">
+                        <div className="backdrop-blur-xl bg-surface-card/80 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-lg">
                             <Minus size={16} className="text-emerald-400 mb-2" />
                             <span className="text-lg font-black text-white">{stats.avg}</span>
-                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mt-1">Rata-Rata (24 Jam)</span>
+                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mt-1">Rata-Rata</span>
                         </div>
-                        <div className="backdrop-blur-xl bg-[#131b2c]/80 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-lg">
+                        <div className="backdrop-blur-xl bg-surface-card/80 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center text-center shadow-lg">
                             <TrendingDown size={16} className="text-blue-400 mb-2" />
                             <span className="text-lg font-black text-white">{stats.min}</span>
                             <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold mt-1">Terendah</span>
                         </div>
                     </div>
-
+                    <h4 className="text-[9px] uppercase font-black tracking-widest text-slate-400 pl-1">
+                        *Statistik 24 Jam Terakhir
+                    </h4>
                 </div>
 
                 {/* KOLOM KANAN: GRAFIK */}
-                <div className="lg:col-span-2 backdrop-blur-2xl bg-[#0f172a]/90 border border-white/10 rounded-[2rem] p-6 flex flex-col min-h-[400px] shadow-2xl relative overflow-hidden">
+                <div className="lg:col-span-3 backdrop-blur-2xl bg-[#0f172a]/90 border border-white/10 rounded-[2rem] p-6 flex flex-col min-h-[400px] shadow-2xl relative overflow-hidden">
                     <div className={`absolute -left-20 -bottom-20 w-64 h-64 rounded-full blur-[100px] opacity-10 pointer-events-none ${theme.glow}`} />
 
                     <div className="flex items-center justify-between mb-6 relative z-10">
@@ -167,14 +215,57 @@ export default function DetailView({
                                 <Activity size={16} className={theme.text} />
                             </div>
                             <h3 className="text-sm font-black tracking-widest uppercase text-white drop-shadow-sm">
-                                Tren Data Terakhir
+                                Grafik Data Terbaru
                             </h3>
                         </div>
-                        <div className={`px-3 py-1 bg-white/5 border ${isBahaya ? 'border-red-500/50 text-red-300 animate-pulse' : 'border-white/10 text-slate-300'} rounded-full text-[10px] font-bold`}>
-                            {isBahaya ? 'KONDISI KRITIS' : 'Real-time Polling'}
+
+                        {/* Kalender Filter Tanggal */}
+                        <div className="relative flex items-center">
+                            {!filterDate ? (
+                                <label className="relative flex items-center justify-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-slate-400 hover:text-cyan-400 cursor-pointer transition-all shadow-inner text-[10px] font-black uppercase tracking-wider group">
+                                    <Calendar size={13} className="transition-transform group-hover:scale-110" />
+                                    <span>Tanggal</span>
+                                    <input
+                                        type="date"
+                                        value={filterDate}
+                                        onChange={(e) => setFilterDate(e.target.value)}
+                                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                                        className="opacity-0 absolute inset-0 w-full h-full cursor-pointer [color-scheme:dark]"
+                                    />
+                                </label>
+                            ) : (
+                                <div className="relative flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.05)] text-[10px] font-black uppercase tracking-wider">
+                                    <Calendar size={13} className="text-cyan-400" />
+                                    <span className="cursor-pointer" onClick={(e) => {
+                                        const input = e.currentTarget.parentNode.querySelector('input[type="date"]');
+                                        if (input && input.showPicker) input.showPicker();
+                                    }}>
+                                        {(() => {
+                                            try {
+                                                const [y, m, d] = filterDate.split('-');
+                                                const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                                                return `${parseInt(d)} ${months[parseInt(m) - 1]} ${y}`;
+                                            } catch (err) {
+                                                return filterDate;
+                                            }
+                                        })()}
+                                    </span>
+                                    <button onClick={() => setFilterDate('')} className="ml-1 text-red-400 hover:text-red-300 hover:scale-115 transition-transform flex items-center justify-center">
+                                        <X size={12} className="stroke-[3]" />
+                                    </button>
+                                    <input
+                                        type="date"
+                                        value={filterDate}
+                                        onChange={(e) => setFilterDate(e.target.value)}
+                                        onClick={(e) => e.target.showPicker && e.target.showPicker()}
+                                        className="opacity-0 absolute inset-0 w-full h-full pointer-events-none"
+                                    />
+                                </div>
+                            )}
                         </div>
                     </div>
 
+                    {/* AREA GRAFIK RECHARTS */}
                     <div className="flex-1 w-full relative z-10">
                         <ResponsiveContainer width="100%" height="100%">
                             <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -190,9 +281,14 @@ export default function DetailView({
                                     stroke="rgba(255,255,255,0.3)"
                                     fontSize={10}
                                     tickMargin={10}
+                                    height={45}
                                     axisLine={false}
                                     tickLine={false}
+                                    interval={0}
+                                    tick={<CustomXAxisTick />}
                                 />
+
+
                                 <YAxis
                                     stroke="rgba(255,255,255,0.3)"
                                     fontSize={10}
@@ -219,3 +315,5 @@ export default function DetailView({
         </div>
     );
 }
+
+

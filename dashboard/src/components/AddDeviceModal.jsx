@@ -23,7 +23,7 @@ export default function AddDeviceModal({ isOpen, onClose, onAdd }) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <div className="bg-[#131b2c] border border-white/10 rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
+            <div className="bg-surface-card border border-white/10 rounded-3xl w-full max-w-md p-6 shadow-2xl relative">
                 <button
                     onClick={onClose}
                     className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors"
@@ -33,10 +33,10 @@ export default function AddDeviceModal({ isOpen, onClose, onAdd }) {
 
                 <div className="flex items-center gap-2 text-cyan-400 mb-4">
                     <CirclePlus size={20} />
-                    <h3 className="font-bold tracking-wider uppercase text-xs">Onboarding Kolam Baru</h3>
+                    <h3 className="font-bold tracking-wider uppercase text-xs">Tambahkan Kolam Baru</h3>
                 </div>
 
-                <h2 className="text-xl font-bold text-white mb-6">Daftarkan Hardware ESP32</h2>
+                <h2 className="text-xl font-bold text-white mb-6">Daftarkan Alat Anda</h2>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
@@ -48,22 +48,22 @@ export default function AddDeviceModal({ isOpen, onClose, onAdd }) {
                             placeholder="Contoh: AQUA-003"
                             value={deviceId}
                             onChange={(e) => setDeviceId(e.target.value.toUpperCase())}
-                            className="w-full bg-[#0a0f1a] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
+                            className="w-full bg-surface-card border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-500 font-mono"
                             required
                         />
-                        <span className="text-[10px] text-slate-500 mt-1 block">ID harus sama persis dengan yang dipancarkan alat.</span>
+                        <span className="text-[10px] text-slate-500 mt-1 block">ID harus sama persis dengan yang tertera pada alat.</span>
                     </div>
 
                     <div>
                         <label className="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
-                            Nama Panggilan Kolam
+                            Nama Kolam
                         </label>
                         <input
                             type="text"
                             placeholder="Contoh: Kolam Pembibitan Lele"
                             value={namaKolam}
                             onChange={(e) => setNamaKolam(e.target.value)}
-                            className="w-full bg-[#0a0f1a] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-500"
+                            className="w-full bg-bg-overlay border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-cyan-500"
                             required
                         />
                     </div>
