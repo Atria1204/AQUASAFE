@@ -7,7 +7,7 @@ services:
       - "1883:1883"
       - "9001:9001"
     volumes:
-      # Kita buat file config sederhana agar mosquitto menerima koneksi dari luar
+      # file config sederhana agar mosquitto menerima koneksi dari luar
       - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
 
   # 2. DATABASE (MySQL)
@@ -37,11 +37,38 @@ services:
       - "8080:80"
     depends_on:
       - db
-  # 2. Dapur Kita (Node.js Backend)
-  # (Sementara kita matikan dulu bagian backend docker ini sampai Mosquitto jalan lancar)
-  # backend:
-  #   build: ./siap-backend
-  #   ports:
-  #     - "5000:5000"
-  #   depends_on:
-  #     - mqtt
+
+  backend:
+    build: ./backend
+    container_name: aquasafe_backend
+    restart: always
+    ports:
+      - "5000:5000"
+    depends_on:
+      - db
+      - mqtt
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASS=root
+      - DB_NAME=aquasafe_iot
+
+  frontend:
+    image: nginx:alpine
+    container_name: aquasafe_frontend
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      - ./dist:/usr/share/nginx/html
+
+  motioneye:
+    image: ccrisan/motioneye:master-amd64
+    container_name: aquasafe_cctv
+    ports:
+      - "8765:8765"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./motioneye/conf:/etc/motioneye
+      - ./motioneye/video:/var/lib/motioneye
+    restart: always
