@@ -5,7 +5,7 @@ import { Timer, Sun, Moon, DatabaseBackup, RefreshCcw, CheckCircle2, XCircle, Al
  * Komponen SistemDanPakan
  * Menampilkan ringkasan status pakan pagi/sore, stok pakan, dan konektivitas perangkat (ONLINE/OFFLINE)
  */
-export default function SistemDanPakan({
+const SistemDanPakan = React.memo(function SistemDanPakan({
     sensorData,
     savedPagi,
     savedSore,
@@ -133,4 +133,7 @@ export default function SistemDanPakan({
             </div>
         </div>
     );
-}
+});
+
+export default SistemDanPakan;
+
