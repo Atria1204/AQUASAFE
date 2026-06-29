@@ -123,14 +123,6 @@ const CctvKolam = ({ deviceId }) => {
                 setIsCamActive(newAction === "ON");
                 if (newAction === "OFF") {
                     setImageUrl('');
-                } else {
-                    setTimeout(() => {
-                        if (!document.getElementById('video-stream-image')) {
-                            setErrorMessage("🚨 KAMERA OFFLINE!");
-                            setIsCamActive(false);
-                            setTimeout(() => setErrorMessage(''), 7000);
-                        }
-                    }, 10000);
                 }
             } else {
                 setErrorMessage(`GAGAL: ${data.message}`);
@@ -138,7 +130,7 @@ const CctvKolam = ({ deviceId }) => {
             }
         } catch (error) {
             console.error("Gagal mengontrol kamera", error);
-            setErrorMessage("🚨 SERVER DOWN!");
+            setErrorMessage("Gagal terhubung ke server!");
             setTimeout(() => setErrorMessage(''), 5000);
         }
 
@@ -148,7 +140,7 @@ const CctvKolam = ({ deviceId }) => {
     };
 
     return (
-        <div className="backdrop-blur-2xl bg-[#0f172a]/95 border border-white/10 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden flex flex-col w-full">
+        <div className="backdrop-blur-2xl bg-surface/95 border border-white/10 rounded-[2rem] p-6 shadow-2xl relative overflow-hidden flex flex-col w-full">
             <div className={`absolute -left-20 -top-20 w-64 h-64 rounded-full blur-[80px] opacity-15 pointer-events-none transition-colors duration-500 ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
 
             <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between mb-4 border-b border-white/[0.05] pb-4 gap-4">
