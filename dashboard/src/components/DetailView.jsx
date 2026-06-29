@@ -33,7 +33,20 @@ const CustomXAxisTick = ({ x, y, payload }) => {
     );
 };
 
-
+// Tooltip Kustom buat Grafik (Dideklarasikan di luar agar tidak unmount-remount tiap re-render)
+const CustomTooltip = ({ active, payload, label, isBahaya, unit }) => {
+    if (active && payload && payload.length) {
+        return (
+            <div className={`bg-surface/95 backdrop-blur-md border ${isBahaya ? 'border-red-500/50' : 'border-white/10'} p-3 rounded-xl shadow-2xl`}>
+                <p className="text-[10px] font-mono text-slate-400 mb-1">{label}</p>
+                <p className="text-sm font-black text-white">
+                    {payload[0].value} <span className="text-[10px] text-slate-400 font-normal">{unit}</span>
+                </p>
+            </div>
+        );
+    }
+    return null;
+};
 
 export default function DetailView({
     activeDetail,
@@ -118,22 +131,6 @@ export default function DetailView({
         };
     }, [chartData, activeDetail, sensorData]);
 
-
-    // Tooltip Kustom buat Grafik
-    const CustomTooltip = ({ active, payload, label }) => {
-        if (active && payload && payload.length) {
-            return (
-                <div className={`bg-[#0f172a]/95 backdrop-blur-md border ${isBahaya ? 'border-red-500/50' : 'border-white/10'} p-3 rounded-xl shadow-2xl`}>
-                    <p className="text-[10px] font-mono text-slate-400 mb-1">{label}</p>
-                    <p className="text-sm font-black text-white">
-                        {payload[0].value} <span className="text-[10px] text-slate-400 font-normal">{detailData.unit}</span>
-                    </p>
-                </div>
-            );
-        }
-        return null;
-    };
-
     return (
         <div className="flex flex-col gap-6 animate-in slide-in-from-right-4 duration-500 ease-out">
 
@@ -170,7 +167,7 @@ export default function DetailView({
                         </h3>
                         <div className="flex items-end gap-2 relative z-10">
                             <span className="text-6xl tracking-tighter font-sans font-black text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.4)]">
-                                {detailData.val !== undefined ? detailData.val.toFixed(activeDetail === 'pH Level' ? 2 : 1) : '0.0'}
+                                {detailData.val !== null ? detailData.val.toFixed(activeDetail === 'pH Level' ? 2 : 1) : '0.0'}
                             </span>
                             <span className={`text-sm font-bold tracking-wider uppercase pb-2 drop-shadow-md ${theme.text}`}>
                                 {detailData.unit}
@@ -206,7 +203,7 @@ export default function DetailView({
                 </div>
 
                 {/* KOLOM KANAN: GRAFIK */}
-                <div className="lg:col-span-3 backdrop-blur-2xl bg-[#0f172a]/90 border border-white/10 rounded-[2rem] p-6 flex flex-col min-h-[400px] shadow-2xl relative overflow-hidden">
+                <div className="lg:col-span-3 backdrop-blur-2xl bg-surface/90 border border-white/10 rounded-[2rem] p-6 flex flex-col min-h-[400px] shadow-2xl relative overflow-hidden">
                     <div className={`absolute -left-20 -bottom-20 w-64 h-64 rounded-full blur-[100px] opacity-10 pointer-events-none ${theme.glow}`} />
 
                     <div className="flex items-center justify-between mb-6 relative z-10">
@@ -297,7 +294,7 @@ export default function DetailView({
                                     tickFormatter={(val) => val}
                                     domain={['auto', 'auto']}
                                 />
-                                <Tooltip content={<CustomTooltip />} />
+                                <Tooltip content={<CustomTooltip isBahaya={isBahaya} unit={detailData.unit} />} />
                                 <Area
                                     type="monotone"
                                     dataKey="val"
