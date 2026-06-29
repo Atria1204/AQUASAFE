@@ -6,7 +6,7 @@ import { Timer, X } from 'lucide-react';
  * Komponen AutoFeederCard
  * Khusus menangani pengaturan jadwal pakan pagi/sore dan pakan instan (manual)
  */
-export default function AutoFeederCard({
+const AutoFeederCard = React.memo(function AutoFeederCard({
     selectedDevice,
     savedPagi,
     savedSore,
@@ -251,4 +251,7 @@ export default function AutoFeederCard({
 
         </div>
     );
-}
+});
+
+export default AutoFeederCard;
+
