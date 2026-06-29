@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Thermometer, FlaskConical, Wind, Leaf, Waves, CheckCircle2, AlertTriangle
 } from 'lucide-react';
@@ -58,7 +58,7 @@ const sensorConfig = {
 const GlassSensorCard = ({ title, valueKey, sensorData, setActiveDetail, className = "" }) => {
     const cfg = sensorConfig[title];
     const val = sensorData?.[valueKey];
-    const displayValue = val !== undefined ? val.toFixed(title === 'pH Level' ? 2 : 1) : '0.0';
+    const displayValue = val !== null ? val.toFixed(title === 'pH Level' ? 2 : 1) : '0.0';
 
     let isBahaya = false;
     if (val !== undefined) {
@@ -138,45 +138,35 @@ export default function Overview({
     };
 
     // =================================================================
-    // LOGIKA POLLING: MENGAMBIL DATA DARI SERVER TIAP 2 DETIK
+    // LOGIKA SINKRONISASI JADWAL PAKAN DARI DATA SENSOR
     // =================================================================
     useEffect(() => {
-        if (!selectedDevice) return;
+        if (!sensorData || !sensorData.pakan) return;
 
-        const fetchPakan = () => {
-            fetch(`${API_BASE_URL}/api/pakan/${selectedDevice}`)
-                .then(res => res.json())
-                .then(data => {
-                    const formatJam = (val) => {
-                        if (val === undefined || val === null || val === '') return '00:00';
-                        if (typeof val === 'string' && val.includes(':')) {
-                            const pecahan = val.split(':');
-                            const hh = pecahan[0].trim().padStart(2, '0');
-                            const mm = pecahan[1].trim().padStart(2, '0');
-                            return `${hh}:${mm}`;
-                        }
-                        return val.toString().padStart(2, '0') + ':00';
-                    };
-
-                    setSavedPagi(formatJam(data.pagi));
-                    setSavedSore(formatJam(data.sore));
-                    if (data.sekarang !== undefined) setIsManualFeedOn(data.sekarang === 1);
-                    if (data.gram_pagi !== undefined) setSavedGramPagi(data.gram_pagi);
-                    if (data.gram_sore !== undefined) setSavedGramSore(data.gram_sore);
-                    if (data.gram_manual !== undefined) setSavedGramManual(data.gram_manual);
-                })
-                .catch(err => console.error("Gagal load data pakan:", err));
+        const formatJam = (val) => {
+            if (val === undefined || val === null || val === '') return '00:00';
+            if (typeof val === 'string' && val.includes(':')) {
+                const pecahan = val.split(':');
+                const hh = pecahan[0].trim().padStart(2, '0');
+                const mm = pecahan[1].trim().padStart(2, '0');
+                return `${hh}:${mm}`;
+            }
+            return val.toString().padStart(2, '0') + ':00';
         };
 
-        fetchPakan();
-        const intervalId = setInterval(fetchPakan, 2000);
-        return () => clearInterval(intervalId);
-    }, [selectedDevice]);
+        const pakan = sensorData.pakan;
+        setSavedPagi(formatJam(pakan.pagi));
+        setSavedSore(formatJam(pakan.sore));
+        if (pakan.sekarang !== undefined) setIsManualFeedOn(pakan.sekarang === 1);
+        if (pakan.gram_pagi !== undefined) setSavedGramPagi(pakan.gram_pagi);
+        if (pakan.gram_sore !== undefined) setSavedGramSore(pakan.gram_sore);
+        if (pakan.gram_manual !== undefined) setSavedGramManual(pakan.gram_manual);
+    }, [sensorData]);
 
     // =================================================================
     // LOGIKA KLIK TOMBOL SET JADWAL & GRAM PAKAN
     // =================================================================
-    const handleSetPakan = async (waktu, currentInputJam, currentInputGram, onSuccess) => {
+    const handleSetPakan = useCallback(async (waktu, currentInputJam, currentInputGram, onSuccess) => {
         let finalJadwalPagi = waktu === 'pagi' ? (currentInputJam || savedPagi) : savedPagi;
         let finalJadwalSore = waktu === 'sore' ? (currentInputJam || savedSore) : savedSore;
 
@@ -216,12 +206,12 @@ export default function Overview({
             console.error("Error:", error);
             showToast("❌ Gagal connect ke server!", "error");
         }
-    };
+    }, [savedPagi, savedSore, savedGramPagi, savedGramSore, selectedDevice]);
 
     // =================================================================
     // LOGIKA KLIK TOMBOL BERI MAKAN INSTAN (MANUAL)
     // =================================================================
-    const executeManualFeed = async (actionState, inputGramManual) => {
+    const executeManualFeed = useCallback(async (actionState, inputGramManual) => {
         let finalGramManual = inputGramManual !== '' ? parseInt(inputGramManual) : savedGramManual;
         if (isNaN(finalGramManual)) finalGramManual = savedGramManual;
 
@@ -245,7 +235,7 @@ export default function Overview({
         } catch (error) {
             showToast("❌ Gagal connect ke server! Pastikan backend nyala.", "error");
         }
-    };
+    }, [savedGramManual, selectedDevice]);
 
     return (
         <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 flex-1 min-h-0 animate-in fade-in duration-700">
@@ -321,7 +311,7 @@ export default function Overview({
 
             {/* Floating Toast Notification */}
             {toast && (
-                <div className={`fixed bottom-8 right-8 z-50 backdrop-blur-xl bg-[#0f172a]/90 px-5 py-3.5 rounded-2xl shadow-2xl border animate-in slide-in-from-bottom-5 fade-in duration-300 flex items-center gap-3 ${toast.tipe === 'success' ? 'border-emerald-500/50' : 'border-red-500/50'}`}>
+                <div className={`fixed bottom-8 right-8 z-50 backdrop-blur-xl bg-surface/90 px-5 py-3.5 rounded-2xl shadow-2xl border animate-in slide-in-from-bottom-5 fade-in duration-300 flex items-center gap-3 ${toast.tipe === 'success' ? 'border-emerald-500/50' : 'border-red-500/50'}`}>
                     <div className={`p-1.5 rounded-full ${toast.tipe === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
                         {toast.tipe === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
                     </div>
