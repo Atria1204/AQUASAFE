@@ -37,7 +37,7 @@ export default function Login({ onLogin }) {
                 setMessage({ text: data.message, type: 'error' });
             }
         } catch (err) {
-            setMessage({ text: 'Coba lagi beberapa saat', type: 'error' });
+            setMessage({ text: 'Coba lagi beberapa saat', type: 'error' }); // server mati atau koneksi internet putus
         }
     };
 
@@ -48,7 +48,7 @@ export default function Login({ onLogin }) {
             <div className="absolute inset-0 bg-background/10 z-0"></div>
 
 
-            {/* The Single Floating Antigravity Card */}
+            {/* The Single Floating Card */}
             <div className="relative z-10 w-full max-w-5xl flex flex-col lg:flex-row items-center gap-12">
 
                 {/* SISI KIRI: Logo Utama & Slogan */}
@@ -68,7 +68,7 @@ export default function Login({ onLogin }) {
                 </div>
 
 
-                {/* SISI KANAN: Form Minimalis */}
+                {/* SISI KANAN */}
                 <div className="w-full lg:w-1/2 p-8 sm:p-14 flex flex-col justify-center bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2rem] hover:shadow-[0_30px_60px_rgba(0,0,0,0.4)] ">
                     <div className="w-full max-w-md mx-auto">
 
@@ -94,7 +94,7 @@ export default function Login({ onLogin }) {
                                     <label htmlFor="nama" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Nama Lengkap</label>
                                     <div className="relative group">
                                         <input id="nama" type="text" placeholder="Masukkan Nama" value={nama} onChange={(e) => setNama(e.target.value)} required
-                                            className="w-full bg-[#0a0f1c] border border-white/10 rounded-xl py-3.5 px-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-primary transition-all focus:ring-2 focus:ring-primary/50 duration-300 ease-out" />
+                                            className="w-full bg-bg-overlay border border-white/10 rounded-xl py-3.5 px-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-primary transition-all focus:ring-2 focus:ring-primary/50 duration-300 ease-out" />
                                     </div>
                                 </div>
                             )}
@@ -103,7 +103,7 @@ export default function Login({ onLogin }) {
                                 <label htmlFor="email" className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Email</label>
                                 <div className="relative group">
                                     <input id="email" type="email" placeholder="Masukkan Email" value={email} onChange={(e) => setEmail(e.target.value)} required
-                                        className="w-full bg-[#0a0f1c] border border-white/10 rounded-xl py-3.5 px-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-primary transition-all focus:ring-2 focus:ring-primary/50 duration-300 ease-out" />
+                                        className="w-full bg-bg-overlay border border-white/10 rounded-xl py-3.5 px-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-primary transition-all focus:ring-2 focus:ring-primary/50 duration-300 ease-out" />
                                 </div>
                             </div>
 
@@ -113,7 +113,7 @@ export default function Login({ onLogin }) {
                                 </div>
                                 <div className="relative group">
                                     <input id="password" type="password" placeholder="Masukkan Password" value={password} onChange={(e) => setPassword(e.target.value)} required
-                                        className="w-full bg-[#0a0f1c] border border-white/10 rounded-xl py-3.5 px-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-primary transition-all focus:ring-2 focus:ring-primary/50 duration-300 ease-out" />
+                                        className="w-full bg-bg-overlay border border-white/10 rounded-xl py-3.5 px-4 text-slate-200 placeholder-slate-500 focus:outline-none focus:border-primary transition-all focus:ring-2 focus:ring-primary/50 duration-300 ease-out" />
                                 </div>
                             </div>
 
