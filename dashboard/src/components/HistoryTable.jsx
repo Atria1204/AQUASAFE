@@ -5,7 +5,8 @@ import { Activity, Calendar, X, DatabaseBackup } from 'lucide-react';
  * Komponen HistoryTable
  * Menampilkan tabel riwayat parameter sensor dengan fitur paginasi dan filter tanggal
  */
-export default function HistoryTable({
+
+const HistoryTable = React.memo(function HistoryTable({
     filteredTableData,
     searchQuery,
     filterDate,
@@ -28,7 +29,7 @@ export default function HistoryTable({
     );
 
     return (
-        <div className={`backdrop-blur-2xl bg-[#0f172a]/95 border border-white/10 rounded-[2rem] p-4 md:p-5 flex flex-col flex-1 min-h-[380px] xl:min-h-0 shadow-2xl relative overflow-hidden ${className}`}>
+        <div className={`backdrop-blur-2xl bg-surface/95 border border-white/10 rounded-[2rem] p-4 md:p-5 flex flex-col flex-1 min-h-[380px] xl:min-h-0 shadow-2xl relative overflow-hidden ${className}`}>
             <div className="absolute -right-20 -top-20 w-64 h-64 rounded-full blur-[80px] opacity-15 bg-blue-500 pointer-events-none" />
 
             <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between mb-2 border-b border-white/[0.05] pb-1.5 gap-4">
@@ -88,7 +89,7 @@ export default function HistoryTable({
 
             <div className="flex-1 overflow-y-auto overflow-x-auto pr-3 custom-scrollbar scroll-smooth relative z-10 min-h-0">
                 <table className="w-full min-w-[600px] text-left text-sm text-slate-200 border-collapse">
-                    <thead className="sticky top-0 bg-[#0f172a]/95 backdrop-blur-xl z-20 before:content-[''] before:absolute before:inset-x-0 before:bottom-0 before:border-b before:border-white/[0.05] whitespace-nowrap">
+                    <thead className="sticky top-0 bg-surface/95 backdrop-blur-xl z-20 before:content-[''] before:absolute before:inset-x-0 before:bottom-0 before:border-b before:border-white/[0.05] whitespace-nowrap">
                         <tr className="text-[10px] font-black uppercase tracking-widest text-slate-500">
                             <th className="pb-4 pt-4 pl-4 w-[24%] rounded-tl-xl">Tanggal & Waktu</th>
                             <th className="pb-4 pt-4 w-[19%] text-blue-300">Suhu Air</th>
@@ -160,4 +161,6 @@ export default function HistoryTable({
             )}
         </div>
     );
-}
+});
+
+export default HistoryTable;
