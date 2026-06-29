@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Thermometer, Wind, Activity, Waves, FlaskConical, Leaf, LogOut } from 'lucide-react';
 import { API_BASE_URL } from './config';
 
@@ -95,8 +95,9 @@ export default function App() {
     setTableData([]);
   };
 
-  const fetchDevices = () => {
+  const fetchDevices = useCallback(() => {
     if (!userId) { setIsLoading(false); return; }
+
     fetch(`${API_BASE_URL}/api/devices/${userId}`)
       .then(res => res.json())
       .then(data => {
@@ -104,6 +105,7 @@ export default function App() {
           setDevices(data);
           const savedDevice = localStorage.getItem('lastViewedDevice');
           const deviceExists = data.some(d => d.device_id === savedDevice);
+
           setSelectedDevice(deviceExists ? savedDevice : data[0].device_id);
         } else {
           setDevices([]);
@@ -114,7 +116,7 @@ export default function App() {
         console.error(err);
         setIsLoading(false);
       });
-  };
+  }, [userId]);
 
   useEffect(() => {
     if (userId) fetchDevices();
@@ -134,6 +136,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedDevice || !userId) return;
+
     const fetchData = () => {
       fetch(`${API_BASE_URL}/api/sensor/${selectedDevice}`)
         .then(res => res.json())
@@ -190,11 +193,11 @@ export default function App() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 2000);
+    const interval = setInterval(fetchData, 2000); // panggil tiap 2 detik
     return () => clearInterval(interval);
-  }, [selectedDevice, userId, filterDate]); // <-- Tambahkan filterDate ke array dependensi agar fetch terpicu ulang saat ganti tanggal
+  }, [selectedDevice, userId, filterDate]); // <-- filterDate ke array dependensi agar fetch terpicu ulang saat ganti tanggal
 
-  const handleAddNewDevice = (newDevice) => {
+  const handleAddNewDevice = useCallback((newDevice) => {
     fetch(`${API_BASE_URL}/api/devices`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -202,9 +205,9 @@ export default function App() {
     })
       .then(() => { fetchDevices(); setSelectedDevice(newDevice.device_id); setIsAddModalOpen(false); })
       .catch(err => console.error("Gagal menyimpan ke server:", err));
-  };
+  }, [userId, fetchDevices]);
 
-  const handleEditDeviceName = (deviceId, newName) => {
+  const handleEditDeviceName = useCallback((deviceId, newName) => {
     fetch(`${API_BASE_URL}/api/devices/${deviceId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -213,21 +216,22 @@ export default function App() {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          // Memperbarui state secara lokal agar nama langsung berubah di UI tanpa reload
           setDevices(prev => prev.map(d => d.device_id === deviceId ? { ...d, nama_kolam: newName } : d));
         } else {
           console.error("Gagal mengubah nama kolam:", data.message);
         }
       })
       .catch(err => console.error("Gagal terhubung ke server:", err));
-  };
+  }, []);
 
   // === PERUBAHAN 2: LOGIKA FILTER DITAMBAH TANGGAL ===
-  const filteredTableData = tableData.filter(row => {
-    const matchSearch = row.fullTime.includes(searchQuery) || row.temp.includes(searchQuery);
-    const matchDate = filterDate ? row.date === filterDate : true;
-    return matchSearch && matchDate;
-  });
+  const filteredTableData = useMemo(() => {
+    return tableData.filter(row => {
+      const matchSearch = row.fullTime.includes(searchQuery) || row.temp.includes(searchQuery);
+      const matchDate = filterDate ? row.date === filterDate : true;
+      return matchSearch && matchDate;
+    });
+  }, [tableData, searchQuery, filterDate]);
 
   // === Logika Pemantau Ambang Batas Sensor & Alarm ===
   // Jika server tidak menerima update lebih dari 5 menit (300000 ms), anggap mati!
@@ -289,7 +293,7 @@ export default function App() {
 
     switch (sensorName) {
       case 'Suhu Air':
-        return { val: sensorData.suhu, unit: '°C', ...getStyle(isSuhuBahaya, 'text-blue-400', 'bg-[#0f172a]', 'border-blue-900/50', '#60a5fa'), icon: <Thermometer />, desc: "Suhu air dipantau ketat untuk menjaga stabilitas." };
+        return { val: sensorData.suhu, unit: '°C', ...getStyle(isSuhuBahaya, 'text-blue-400', 'bg-surface', 'border-blue-900/50', '#60a5fa'), icon: <Thermometer />, desc: "Suhu air dipantau ketat untuk menjaga stabilitas." };
       case 'pH Level':
         return { val: sensorData.ph, unit: 'pH', ...getStyle(isPhBahaya, 'text-fuchsia-400', 'bg-[#1e112a]', 'border-fuchsia-900/50', '#e879f9'), icon: <FlaskConical />, desc: "Keseimbangan asam basa air krusial." };
       case 'O2 Terlarut':
@@ -301,36 +305,41 @@ export default function App() {
       case 'Flow 2':
         return { val: sensorData.flow2, unit: 'L/M', ...getStyle(isFlow2Bahaya, 'text-teal-400', 'bg-[#0d2222]', 'border-teal-900/50', '#2dd4bf'), icon: <Waves />, desc: "Kecepatan aliran pengolahan biofilter." };
       default:
-        return { val: 0, unit: '', color: 'text-gray-400', bg: 'bg-[#131b2c]', border: 'border-gray-800', hex: '#9ca3af', icon: <Activity />, desc: "" };
+        return { val: 0, unit: '', color: 'text-gray-400', bg: 'bg-surface-card', border: 'border-gray-800', hex: '#9ca3af', icon: <Activity />, desc: "" };
     }
   };
 
-  const sortedDevices = [...devices].sort((a, b) => {
-    const getRank = (stat) => {
-      // Peringkat 3 = Kuning (Bahaya), Peringkat 2 = Hijau (Normal), Peringkat 1 = Merah (Mati/Kosong)
-      if (!stat || Object.keys(stat).length === 0) return 1; // Merah
+  const sortedDevices = useMemo(() => {
+    return [...devices].sort((a, b) => {
+      const getRank = (stat) => {
+        // Peringkat 3 = Kuning (Bahaya), Peringkat 2 = Hijau (Normal), Peringkat 1 = Merah (Mati/Kosong)
+        if (!stat || Object.keys(stat).length === 0) return 1; // Merah
 
-      const isDeviceMati = !stat.lastUpdated || (Date.now() - stat.lastUpdated > 300000);
-      if (isDeviceMati) return 1; // Merah
+        const isDeviceMati = !stat.lastUpdated || (Date.now() - stat.lastUpdated > 300000);
+        if (isDeviceMati) return 1; // Merah
 
-      // Cek apakah ada satupun sensor yang menyentuh batas bahaya
-      const isSuhuBahaya = stat.suhu > 30 || (stat.suhu < 24 && stat.suhu !== 0);
-      const isPhBahaya = (stat.ph < 5.0 && stat.ph !== 0) || stat.ph > 8.0;
-      const isDoBahaya = stat.do < 3.0 && stat.do !== 0;
-      const isTdsBahaya = (stat.tds < 300 && stat.tds !== 0) || stat.tds > 1000;
-      const isFlow1Bahaya = stat.flow1 < 5.0 && stat.flow1 !== 0;
-      const isFlow2Bahaya = stat.flow2 < 5.0 && stat.flow2 !== 0;
+        // Cek apakah ada satupun sensor yang menyentuh batas bahaya
+        const isSuhuBahaya = stat.suhu > 30 || (stat.suhu < 24 && stat.suhu !== 0);
+        const isPhBahaya = (stat.ph < 5.0 && stat.ph !== 0) || stat.ph > 8.0;
+        const isDoBahaya = stat.do < 3.0 && stat.do !== 0;
+        const isTdsBahaya = (stat.tds < 300 && stat.tds !== 0) || stat.tds > 1000;
+        const isFlow1Bahaya = stat.flow1 < 5.0 && stat.flow1 !== 0;
+        const isFlow2Bahaya = stat.flow2 < 5.0 && stat.flow2 !== 0;
 
-      if (isSuhuBahaya || isPhBahaya || isDoBahaya || isTdsBahaya || isFlow1Bahaya || isFlow2Bahaya) {
-        return 3; // Kuning (Prioritas Tertinggi)
-      }
+        if (isSuhuBahaya || isPhBahaya || isDoBahaya || isTdsBahaya || isFlow1Bahaya || isFlow2Bahaya) {
+          return 3; // Kuning (Prioritas Tertinggi)
+        }
 
-      return 2; // Hijau (Aman/Normal)
-    };
+        return 2; // Hijau (Aman/Normal)
+      };
 
-    return getRank(allStatuses[b.device_id]) - getRank(allStatuses[a.device_id]);
-  });
+      return getRank(allStatuses[b.device_id]) - getRank(allStatuses[a.device_id]);
+    });
+  }, [devices, allStatuses]);
 
+  const hourlyChartData = useMemo(() => {
+    return getHourlyData(tableData, activeDetail);
+  }, [tableData, activeDetail]);
 
   if (!userId) {
     return <Login onLogin={(id, nama) => {
@@ -345,7 +354,7 @@ export default function App() {
     <div className="min-h-screen bg-[url('/background1.jpg')] bg-cover bg-fixed bg-center text-slate-100 font-sans overflow-x-hidden relative">
 
       {/* Overlay Gelap Kaca */}
-      <div className="absolute inset-0 bg-[#030712]/90 backdrop-blur-md z-0 pointer-events-none fixed"></div>
+      <div className="absolute inset-0 bg-background/90 backdrop-blur-md z-0 pointer-events-none fixed"></div>
 
       {/* Konten Utama Dasbor dibungkus relative z-10 */}
       <div className="relative z-10 p-4 md:p-5 flex flex-col min-h-screen xl:h-screen xl:overflow-auto">
@@ -404,7 +413,7 @@ export default function App() {
                 setActiveDetail={setActiveDetail}
                 detailData={getDetailConfig(activeDetail)}
                 sensorData={sensorData} // Mengirim data sensor beserta nilai agregasi
-                chartData={getHourlyData(tableData, activeDetail)} // Selalu per jam
+                chartData={hourlyChartData} // Selalu per jam
                 selectedDevice={selectedDevice}
                 filterDate={filterDate}   // Kirim state tanggal
                 setFilterDate={setFilterDate} // Kirim updater tanggal
