@@ -7,7 +7,7 @@ const http = require('http');
 const WebSocket = require('ws');
 
 const app = express();
-// Kita buat server HTTP terpisah agar bisa di-bridge ke WebSocket
+// buat server HTTP terpisah agar bisa di-bridge ke WebSocket
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
@@ -17,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 // =================================================================
-// 1. KONEKSI KE DATABASE MYSQL (DOCKER)
+// KONEKSI KE DATABASE MYSQL (DOCKER)
 // =================================================================
 const db = mysql.createPool({
     host: process.env.DB_HOST,
@@ -32,29 +32,7 @@ const db = mysql.createPool({
 
 console.log('✅ Database MySQL Pool Siap Digunakan!');
 
-// =================================================================
-// 1.5 INISIALISASI TABEL LOG (OTOMATIS DIBUAT JIKA BELUM ADA)
-// =================================================================
-db.query(`CREATE TABLE IF NOT EXISTS pakan_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    device_id VARCHAR(50),
-    jenis_trigger VARCHAR(50),
-    jumlah_gram INT,
-    waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)`, (err) => {
-    if (err) console.error('❌ Gagal membuat tabel pakan_logs:', err);
-    else console.log('✅ Tabel pakan_logs siap');
-});
-
-db.query(`CREATE TABLE IF NOT EXISTS device_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    device_id VARCHAR(50),
-    status VARCHAR(50),
-    waktu TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)`, (err) => {
-    if (err) console.error('❌ Gagal membuat tabel device_logs:', err);
-    else console.log('✅ Tabel device_logs siap');
-});
+let currentData = {};
 
 // Fungsi Helper untuk mendeteksi event pakan/stok dan mencatatnya ke log
 const checkAndLogEvents = (deviceId, newData) => {
@@ -97,7 +75,7 @@ const checkAndLogEvents = (deviceId, newData) => {
 };
 
 // =================================================================
-// 2. SISTEM AUTENTIKASI (SESUAI DATABASE ASLI)
+// SISTEM AUTENTIKASI
 // =================================================================
 
 // JALUR REGISTER (DAFTAR)
@@ -141,18 +119,7 @@ app.post('/api/login', (req, res) => {
     });
 });
 
-// =================================================================
-// 3. MEMORI GLOBAL & JALUR SENSOR ESP32
-// =================================================================
-let currentData = {
-    "AQUA-TEST": {
-        suhu: 27.4, ph: 7.18, do: 8.5, tds: 440,
-        flow1: 12.5, flow2: 8.0, flow3: 4.2, flow4: 12.0,
-        lastUpdated: Date.now()
-    }
-};
-
-// JALUR TOL HTTP CLOUDFLARE (BUAT ESP32)
+// JALUR HTTP CLOUDFLARE (BUAT ESP32)
 app.post('/api/sensor/update', (req, res) => {
     const { deviceId, data } = req.body;
 
@@ -167,7 +134,7 @@ app.post('/api/sensor/update', (req, res) => {
         }
     }
 
-    console.log(`📥 Data HTTP Masuk [${deviceId}]:`, data);
+    console.log(`[${new Date().toLocaleString('id-ID')}] Data HTTP Masuk [${deviceId}]:`, data);
 
     // --- CEK DAN CATAT LOG EVENT (JADWAL & STOK) ---
     checkAndLogEvents(deviceId, data);
@@ -240,7 +207,7 @@ mqttClient.on('message', (topic, message) => {
 });
 
 // =================================================================
-// 4. ENDPOINT API UNTUK KONSUMSI FRONTEND (REACT)
+// ENDPOINT API UNTUK FRONTEND
 // =================================================================
 
 app.get('/api/devices/:userId', (req, res) => {
@@ -307,7 +274,7 @@ app.delete('/api/devices/:deviceId', async (req, res) => {
         // Hapus dari device_logs
         await db.promise().query('DELETE FROM device_logs WHERE device_id = ?', [deviceId]);
 
-        // Terakhir hapus perangkat dari tabel devices (akan men-cascade tabel Pakan)
+        // Hapus perangkat dari tabel devices
         const [result] = await db.promise().query('DELETE FROM devices WHERE device_id = ?', [deviceId]);
 
         if (result.affectedRows === 0) {
@@ -327,15 +294,34 @@ app.delete('/api/devices/:deviceId', async (req, res) => {
 app.get('/api/sensor/:deviceId', (req, res) => {
     const deviceId = req.params.deviceId;
 
-    // Jika data di memori sudah ada dan valid, langsung kembalikan
+    // Fungsi helper untuk mengambil data pakan dari DB dan mengirim response gabungan
+    const sendSensorWithPakan = (sensorData) => {
+        db.query('SELECT pagi, sore, sekarang, gram_pagi, gram_sore, gram_manual FROM Pakan WHERE device_id = ?', [deviceId], (err, pakanResults) => {
+            const pakan = pakanResults && pakanResults.length > 0 ? pakanResults[0] : {
+                pagi: '08:00',
+                sore: '16:00',
+                sekarang: 0,
+                gram_pagi: 70,
+                gram_sore: 70,
+                gram_manual: 70
+            };
+            res.json({
+                ...sensorData,
+                pakan: pakan
+            });
+        });
+    };
+
+    // Jika data di memori sudah ada dan valid, langsung gabungkan dengan pakan dan kirim
     if (currentData[deviceId] && currentData[deviceId].lastUpdated) {
-        return res.json(currentData[deviceId]);
+        return sendSensorWithPakan(currentData[deviceId]);
     }
 
-    // Jika memori kosong (misal karena backend baru restart), ambil 1 data terakhir dari database!
+    // Jika memori kosong (misal karena backend baru restart), ambil dari database
     db.query('SELECT * FROM sensor_logs WHERE device_id = ? ORDER BY id DESC LIMIT 1', [deviceId], (err, results) => {
         if (err || results.length === 0) {
-            return res.json(currentData[deviceId] || { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0, flow3: 0, flow4: 0 });
+            const defaultSensor = currentData[deviceId] || { suhu: 0, ph: 0, do: 0, tds: 0, flow1: 0, flow2: 0 };
+            return sendSensorWithPakan(defaultSensor);
         }
 
         const row = results[0];
@@ -344,19 +330,18 @@ app.get('/api/sensor/:deviceId', (req, res) => {
             ...currentData[deviceId],
             suhu: row.suhu,
             ph: row.ph,
-            do: row.do,
+            do: row.do_level,
             tds: row.tds,
             flow1: row.flow1,
             flow2: row.flow2,
-            flow3: row.flow3,
-            flow4: row.flow4,
-            // Konversi format waktu MySQL ke timestamp js (Pastikan timezone +07:00 / WIB)
-            lastUpdated: row.waktu ? new Date(row.waktu.replace(' ', 'T') + '+07:00').getTime() : Date.now()
+            lastUpdated: row.waktu ? new Date(row.waktu.replace(' ', 'T') + '+07:00').getTime() : Date.now(),
+            lastLoggedSensorTime: Date.now()
         };
 
-        res.json(currentData[deviceId]);
+        sendSensorWithPakan(currentData[deviceId]);
     });
 });
+
 
 app.get('/api/history/:deviceId', (req, res) => {
     const deviceId = req.params.deviceId;
@@ -395,7 +380,7 @@ app.get('/api/pakan/:deviceId', (req, res) => {
 
 
 // =================================================================
-// 5. JALUR KONTROL AUTO-FEEDER (DARI WEB KE ALAT)
+// JALUR KONTROL AUTO-FEEDER (DARI WEB KE ALAT)
 // =================================================================
 app.post('/api/feeder/schedule', (req, res) => {
     const { deviceId, jadwalPagi, jadwalSore, gramPagi, gramSore } = req.body;
@@ -424,7 +409,7 @@ app.post('/api/feeder/schedule', (req, res) => {
                     if (errUpdate) console.error('❌ Gagal update DB:', errUpdate);
                 });
             } else {
-                // Kalau KOSONG, kita bikin baris BARU (INSERT)
+                // Kalau KOSONG, kita bikin baris BARU
                 db.query('INSERT INTO Pakan (device_id, pagi, sore, sekarang, gram_pagi, gram_sore, gram_manual) VALUES (?, ?, ?, 0, ?, ?, 70)', [deviceId, jadwalPagi, jadwalSore, gramPagi, gramSore], (errInsert) => {
                     if (errInsert) console.error('❌ Gagal insert DB:', errInsert);
                 });
@@ -472,7 +457,7 @@ app.post('/api/feeder/manual', (req, res) => {
 
 
 // =================================================================
-// 6. BACKGROUND JOB: MENGHITUNG RATA-RATA 24 JAM
+// BACKGROUND JOB: MENGHITUNG RATA-RATA 24 JAM
 // =================================================================
 // Fungsi ini berjalan diam-diam setiap 1 menit untuk merekap nilai rata-rata tiap device
 const runBackgroundJob = () => {
@@ -566,7 +551,7 @@ setInterval(runBackgroundJob, 60000); // 60000 ms = 1 menit
 setTimeout(runBackgroundJob, 2000); // Eksekusi awal 2 detik setelah server hidup
 
 // =================================================================
-// 7. SISTEM CCTV (WEBSOCKETS KONTROL ON/OFF & SINKRONISASI GLOBAL)
+// SISTEM CCTV (WEBSOCKETS KONTROL ON/OFF & SINKRONISASI GLOBAL)
 // =================================================================
 // STRUKTUR PENAMPUNG MULTI-KAMERA (DENGAN PER-USER AUTO SHUTDOWN)
 // =================================================================
@@ -594,9 +579,25 @@ function broadcastEspStatus(deviceId) {
 }
 
 wss.on('connection', (ws, req) => {
+
     const parsedUrl = new URL(req.url, 'http://localhost');
     const pathname = parsedUrl.pathname;
     const deviceId = parsedUrl.searchParams.get('deviceId') || 'AQUA-001';
+    ws.alive = true;
+
+    ws.on("error", (err) => {
+        ws.alive = false;
+        console.error(`📷 [CCTV] Error koneksi ESP32-CAM untuk device ${deviceId}:`, err.message);
+        ws.close();
+    })
+
+    ws.on("pong", () => {
+        ws.alive = true; // Tanda OK
+    });
+
+    ws.on("ping", () => {
+        ws.alive = true; // Tanda ESP32 Standby masih hidup
+    });
 
     if (pathname === '/api/stream/input') {
         console.log(`📷 [CCTV] ESP32-CAM untuk device ${deviceId} berhasil terhubung!`);
@@ -611,6 +612,7 @@ wss.on('connection', (ws, req) => {
         broadcastEspStatus(deviceId);
 
         ws.on('message', (message) => {
+            ws.alive = true;
             // Forward binary frame ke semua viewers untuk deviceId ini
             const viewers = viewersMap.get(deviceId);
             if (viewers) {
@@ -622,12 +624,20 @@ wss.on('connection', (ws, req) => {
             }
         });
 
+
+
         ws.on('close', () => {
-            console.log(`📷 [CCTV] Koneksi ESP32-CAM untuk device ${deviceId} terputus!`);
-            esp32Sockets.delete(deviceId);
-            cameraStreamingStates.set(deviceId, false);
-            broadcastEspStatus(deviceId);
+            // Hanya hapus dan update dashboard JIKA socket yang mati adalah socket yang sedang aktif
+            if (esp32Sockets.get(deviceId) === ws) {
+                console.log(`📷 [CCTV] Koneksi ESP32-CAM untuk device ${deviceId} benar-benar terputus!`);
+                esp32Sockets.delete(deviceId);
+                cameraStreamingStates.set(deviceId, false);
+                broadcastEspStatus(deviceId);
+            } else {
+                console.log(`🧹 [BACKEND] Ghost socket untuk ${deviceId} berhasil dibersihkan diam-diam.`);
+            }
         });
+
     }
     else if (pathname === '/api/stream/output') {
         if (!viewersMap.has(deviceId)) {
@@ -697,6 +707,17 @@ app.post('/api/kamera/toggle', (req, res) => {
     res.json({ success: true, message: `Perintah ${action} untuk ${deviceId} diproses!` });
 });
 
+setInterval(() => {
+    wss.clients.forEach((ws) => {
+        if (!ws.alive) {
+            ws.terminate();
+            console.log(`[BACKEND] Mematikan klien yang tidak aktif`);
+        } else {
+            ws.alive = false;
+            ws.ping();
+        }
+    })
+}, 20000);
 
 server.listen(PORT, () => {
     console.log(`🚀 Server Backend Multi-Device berjalan pada port ${PORT} (Dengan WebSockets)`);
